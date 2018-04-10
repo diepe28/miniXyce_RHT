@@ -35,6 +35,7 @@
 #include "mX_linear_DAE.h"
 #include "mX_sparse_matrix.h"
 #include <fstream>
+#include <unistd.h>
 #include "mX_parser.h"
 
 #ifdef HAVE_MPI
@@ -59,7 +60,20 @@ mX_linear_DAE* mX_parse_utils::parse_netlist(std::string filename, int p, int pi
 
 	std::ifstream infile;
 	infile.open(filename.data());
-	
+
+	if(!infile.is_open())
+	{
+		char cwd[1024];
+		if (getcwd(cwd, sizeof(cwd)) != NULL)
+			printf("Current working dir: %s\n", cwd);
+		else
+			perror("getcwd() error");
+
+		printf("Error opening file: %s \n Reason: %s \n", filename.data(), strerror(errno));
+
+		exit(2);
+	}
+
         // Variables for the device count
 	int voltage_src_number = 0;
 	int current_src_number = 0;
@@ -71,14 +85,21 @@ mX_linear_DAE* mX_parse_utils::parse_netlist(std::string filename, int p, int pi
 		// i.e, how many nodes, how many voltage sources, how many inductors
 
 	bool got_meta_info = false;
+    int currentLine = 0;
 
 	while (!got_meta_info && !infile.eof())
 	{
+        if(currentLine++ > 99999) {
+            printf("Suspiciously large file...\n");
+            exit(1);
+        }
+
 		std::string curr_line;
 		getline(infile,curr_line);
-		
+
 		if ((curr_line.length() == 0) || (curr_line[0] == '%'))
 		{
+
 			continue;	// comments begin with %
 		}
 

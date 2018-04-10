@@ -5,7 +5,6 @@
 #include "RHT.h"
 
 RHT_QUEUE globalQueue;
-ReaderWriterQueue<double> moodyCamelQueue(256);
 
 long producerCount;
 long consumerCount;

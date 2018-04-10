@@ -58,7 +58,11 @@ using namespace mX_parms_utils;
 
 //mpirun -np 1 miniXyce.x -c tests/cir7.net
 
+//-D CMAKE_C_COMPILER=/usr/bin/gcc-7 -D CMAKE_CXX_COMPILER=/usr/bin/g++-7
+//-D CMAKE_C_COMPILER=/usr/bin/mpicc -D CMAKE_CXX_COMPILER=/usr/bin/mpicxx
+
 int main(int argc, char* argv[]) {
+    printf("At least it is here... \n");
     // this is of course, the actual transient simulator
     int p = 1, pid = 0, n = 0;
 #ifdef HAVE_MPI
@@ -94,6 +98,7 @@ int main(int argc, char* argv[]) {
     tstart = mX_timer();
     int num_internal_nodes, num_voltage_sources, num_inductors;
     int num_current_sources = 0, num_resistors = 0, num_capacitors = 0;
+    printf("is here now... \n");
     mX_linear_DAE *dae = parse_netlist(ckt_netlist_filename, p, pid, n, num_internal_nodes, num_voltage_sources,
                                        num_current_sources,
                                        num_resistors, num_capacitors, num_inductors);
