@@ -1,5 +1,6 @@
 
 OBJS = \
+    RHT.o \
 	mX_source.o \
 	mX_linear_DAE.o \
 	mX_parms.o \

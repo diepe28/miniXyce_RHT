@@ -16,6 +16,8 @@ double groupVarProducer;
 double groupVarConsumer;
 int groupIncompleteConsumer;
 int groupIncompleteProducer;
+__thread long iterCountProducer;
+__thread long iterCountConsumer;
 
 void RHT_Produce_Secure(double value) {
 #if APPROACH_USING_POINTERS == 1

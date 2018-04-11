@@ -3,7 +3,7 @@
 
 #define MINIXYCE_HOSTNAME "diego-Latitude-E7470"
 #define MINIXYCE_KERNEL_NAME "'Linux'"
-#define MINIXYCE_KERNEL_RELEASE "'4.13.0-37-generic'"
+#define MINIXYCE_KERNEL_RELEASE "'4.13.0-38-generic'"
 #define MINIXYCE_PROCESSOR "'x86_64'"
 
 #define MINIXYCE_CXX "'/usr/bin/mpicxx'"

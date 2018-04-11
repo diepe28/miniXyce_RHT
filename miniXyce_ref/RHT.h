@@ -1,4 +1,4 @@
-    //
+//
 // Created by diego on 30/10/17.
 //
 
@@ -16,6 +16,7 @@
 #include <pthread.h>
 #include <zconf.h>
 #include <cmath>
+
 
 // -------- Macros ----------
 // a cache line is 64 bytes, int -> 4 bytes, double -> 8 bytes
@@ -55,6 +56,8 @@ extern double groupVarProducer;
 extern double groupVarConsumer;
 extern int groupIncompleteConsumer;
 extern int groupIncompleteProducer;
+extern __thread long iterCountProducer;
+extern __thread long iterCountConsumer;
 
 static pthread_t **consumerThreads;
 static int consumerThreadCount;
@@ -94,12 +97,12 @@ extern long consumerCount;
 #endif
 
 #if VAR_GROUPING == 1
-#define calc_write_move(iterator, operation, value)                 \
-    operation;                                                      \
-    groupVarProducer += value;                                      \
-    if(iterator % GROUP_GRANULARITY == 0){                      \
-        write_move(groupVarProducer)                                \
-        groupVarProducer = 0;                                       \
+#define calc_write_move(iterator, operation, value)     \
+    operation;                                          \
+    groupVarProducer += value;                          \
+    if(iterator % GROUP_GRANULARITY == 0){              \
+        write_move(groupVarProducer)                    \
+        groupVarProducer = 0;                           \
     }
 #else
 #define calc_write_move(iterator, operation, value)     \
@@ -159,43 +162,46 @@ extern long consumerCount;
         calc_and_move(operation, value)                                 \
     }
 
-#define replicate_loop_producer_(numIters, iterator, value, operation)  \
-    wait_for_consumer(globalQueue.newLimit)                             \
-    iterator = 0;                                                       \
-    while (globalQueue.newLimit < numIters) {                           \
-        for (; iterator < globalQueue.newLimit; iterator++){            \
-            calc_write_move(iterator, operation, value)                 \
-        }                                                               \
-        wait_for_consumer(globalQueue.diff)                             \
-        globalQueue.newLimit += globalQueue.diff;                       \
-    }                                                                   \
-    for (; iterator < numIters; iterator++){                            \
-        calc_write_move(iterator, operation, value)                     \
+// works for either forward or backward loop for
+#define replicate_loop_producer_(numIters, iterator, iterOp, value, operation)  \
+    wait_for_consumer(globalQueue.diff)                                         \
+    while (globalQueue.diff < numIters) {                                       \
+        numIters -= globalQueue.diff;                                           \
+        for (; globalQueue.diff-- > 0; iterOp){                                 \
+            calc_write_move(iterator, operation, value)                         \
+        }                                                                       \
+        wait_for_consumer(globalQueue.diff)                                     \
+    }                                                                           \
+    for (; numIters-- > 0; iterOp){                                             \
+        calc_write_move(iterator, operation, value)                             \
     }
 
 #if VAR_GROUPING == 1
-#define replicate_loop_producer(numIters, iterator, value, operation)   \
-    groupVarProducer = 0;                                               \
-    groupIncompleteProducer = numIters % GROUP_GRANULARITY;             \
-    replicate_loop_producer_(numIters, iterator, value, operation)      \
-    if (groupIncompleteProducer) {                                      \
-        write_move(groupVarProducer)                                    \
+#define replicate_loop_producer(sIndex, fIndex, iterator, iterOp, value, operation) \
+    iterCountProducer = fIndex - sIndex;                                            \
+    groupVarProducer = 0;                                                           \
+    groupIncompleteProducer = iterCountProducer % GROUP_GRANULARITY;                \
+    replicate_loop_producer_(iterCountProducer, iterator, iterOp, value, operation) \
+    if (groupIncompleteProducer) {                                                  \
+        write_move(groupVarProducer)                                                \
     }
 #else
-    #define replicate_loop_producer(numIters, iterator, value, operation) \
-        replicate_loop_producer_(numIters, iterator, value, operation)
+#define replicate_loop_producer(sIndex, fIndex, iterator, iterOp, value, operation) \
+        iterCountProducer = fIndex - sIndex;                                        \
+        replicate_loop_producer_(iterCountProducer, iterator, iterOp, value, operation)
 #endif
 
-#define replicate_loop_consumer(numIters, iterator, value, operation)       \
-    groupIncompleteConsumer = numIters % GROUP_GRANULARITY;                 \
-    for(groupVarConsumer = iterator = 0; iterator < numIters; iterator++){  \
-        operation;                                                          \
-        groupVarConsumer += value;                                          \
-        if(iterator % GROUP_GRANULARITY == 0){                          \
-            RHT_Consume_Check(groupVarConsumer);                            \
-            groupVarConsumer = 0;                                           \
-        }                                                                   \
-    }                                                                       \
+#define replicate_loop_consumer(sIndex, fIndex, iterator, iterOp, value, operation) \
+    iterCountConsumer = fIndex - sIndex;                                            \
+    groupIncompleteConsumer = iterCountConsumer % GROUP_GRANULARITY;                \
+    for(groupVarConsumer = 0; iterCountConsumer-- > 0; iterOp){                     \
+        operation;                                                                  \
+        groupVarConsumer += value;                                                  \
+        if(iterator % GROUP_GRANULARITY == 0){                                      \
+            RHT_Consume_Check(groupVarConsumer);                                    \
+            groupVarConsumer = 0;                                                   \
+        }                                                                           \
+    }                                                                               \
     if (groupIncompleteConsumer) RHT_Consume_Check(groupVarConsumer);
 
 
@@ -291,7 +297,7 @@ static INLINE double AlreadyConsumed_Consume() {
 #endif
     {
 #if COUNT_QUEUE_DESYNC == 1
-         consumerCount++;
+        consumerCount++;
 #endif
         do {
             asm("pause");
@@ -310,7 +316,7 @@ static INLINE void AlreadyConsumed_Consume_Check(double currentValue) {
 #if BRANCH_HINT == 1
     if(__builtin_expect(fequal(currentValue, globalQueue.otherValue),1))
 #else
-     if(fequal(currentValue, globalQueue.otherValue))
+    if(fequal(currentValue, globalQueue.otherValue))
 #endif
     {
         globalQueue.content[globalQueue.deqPtr] = ALREADY_CONSUMED;
@@ -476,7 +482,6 @@ static INLINE void WriteInverted_Produce_Secure(double value){
     globalQueue.content[globalQueue.enqPtr] = value;
     globalQueue.enqPtr = globalQueue.nextEnq;
 }
-
 
 
 //////////// 'PUBLIC' QUEUE METHODS //////////////////
