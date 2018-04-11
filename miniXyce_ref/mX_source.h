@@ -36,42 +36,36 @@
 #include <vector>
 #include <sstream>
 
-namespace mX_source_utils
-{
-	class mX_source
-	{
+namespace mX_source_utils {
+	class mX_source {
 		// this class represents a time-varying voltage or current source
-			// all that is needed is the value of the output at time "t"
+		// all that is needed is the value of the output at time "t"
 
-		public:
+	public:
 
 		virtual double output(double t) = 0;
 	};
 
-	class DC : public mX_source
-	{
+	class DC : public mX_source {
 		// DC voltage/current source
 
-		public:
+	public:
 
 		double val;
 
-		DC(double d)
-		{
+		DC(double d) {
 			val = d;
 		}
 
-		virtual double output(double t)
-		{
+		virtual double output(double t) {
 			return val;
 		}
 	};
 
-	class SINE : public mX_source
-	{
+	class SINE : public mX_source {
 		// sinusoidal voltage/current source
 
-		public:
+	public:
 
 		double offset;
 		double amplitude;
@@ -80,14 +74,13 @@ namespace mX_source_utils
 
 		SINE(double off, double amp, double f, double ph);
 
-		virtual double output(double t); 
+		virtual double output(double t);
 	};
 
-	class FM : public mX_source
-	{
+	class FM : public mX_source {
 		// frequency modulated voltage/current source
 
-		public:
+	public:
 
 		double offset;
 		double amplitude;
@@ -97,14 +90,13 @@ namespace mX_source_utils
 
 		FM(double o, double a, double cf, double mi, double sf);
 
-		virtual double output(double t); 
+		virtual double output(double t);
 	};
 
-	class PWL : public mX_source
-	{
+	class PWL : public mX_source {
 		// piecewise linear voltage/current source
 
-		public:
+	public:
 
 		std::vector<double> times;
 		std::vector<double> values;
@@ -114,11 +106,10 @@ namespace mX_source_utils
 		virtual double output(double t);
 	};
 
-	class PULSE : public mX_source
-	{
+	class PULSE : public mX_source {
 		// pulse shaped voltage/current source
 
-		public:
+	public:
 
 		double val1;
 		double val2;
@@ -133,16 +124,15 @@ namespace mX_source_utils
 		virtual double output(double t);
 	};
 
-	struct mX_scaled_source
-	{
+	struct mX_scaled_source {
 		// a scaled voltage/current source
-			// useful in many contexts
-				// eg: when you want -V(t) and already have a source V(t)
+		// useful in many contexts
+		// eg: when you want -V(t) and already have a source V(t)
 
-		mX_source* src;
+		mX_source *src;
 		double scale;
 	};
 
-	mX_source* parse_source(std::istringstream& input_str);
+	mX_source *parse_source(std::istringstream &input_str);
 }
 #endif

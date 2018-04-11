@@ -1,4 +1,4 @@
-circuit = /home/diego/Documents/workspace/miniXyce_RHT/tests/cir2.net
+circuit = tests/cir2.net
 t_start = 0
 t_step = 1e-08
 t_stop = 5e-06
