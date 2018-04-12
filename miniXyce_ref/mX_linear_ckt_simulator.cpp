@@ -123,13 +123,11 @@ int main(int argc, char* argv[]) {
                                        num_current_sources,
                                        num_resistors, num_capacitors, num_inductors);
 
-    if (replicated) {
-        exit(1);
+    if (replicated || true) {
         RHT_Replication_Init(numThreads);
 
         mX_linear_DAE *dae2 = parse_netlist(ckt_netlist_filename, p, pid, n2, num_internal_nodes2, num_voltage_sources2,
-                                            num_current_sources2,
-                                            num_resistors2, num_capacitors2, num_inductors2);
+                                            num_current_sources2, num_resistors2, num_capacitors2, num_inductors2);
         ConsumerParams *consumerParams = (ConsumerParams *) (malloc(sizeof(ConsumerParams)));
 
         consumerParams->executionCore = consumerCore;
@@ -425,7 +423,7 @@ void main_execution(int p, int pid, int n, double sim_start, YAML_Doc &doc, cons
 
 
 void main_execution_replicated(int p, int pid, int n, double sim_start, YAML_Doc &doc, const std::string &ckt_netlist_filename,
-                          double t_start, double t_step, double t_stop, double tol, double res, int k, int iters,
+                              double t_start, double t_step, double t_stop, double tol, double res, int k, int iters,
                           int restarts, std::vector<double> &init_cond, bool init_cond_specified, double tstart, double tend,
                           int num_internal_nodes, int num_voltage_sources, int num_inductors, int num_current_sources,
                           int num_resistors, int num_capacitors, mX_linear_DAE *dae) {
@@ -494,6 +492,7 @@ void main_execution_replicated(int p, int pid, int n, double sim_start, YAML_Doc
         }
 
         //std::vector<double> init_RHS = evaluate_b_producer(t_start, dae);
+        //        /*-- RHT -- */ RHT_Produce(t_start);
         std::vector<double> init_RHS = evaluate_b(t_start, dae);
 
 //        gmres_producer(dae->A, init_RHS, init_cond_guess, tol, res, k, init_cond, iters, restarts);
@@ -703,12 +702,12 @@ void consumer_thread_func(void *args) {
     int min_rows = num_my_rows, max_rows = num_my_rows, sum_rows = num_my_rows;
 
 #ifdef HAVE_MPI
-    /*-- RHT -- */ sum_nnz = RHT_Consume();
-    /*-- RHT -- */ min_nnz = RHT_Consume();
-    /*-- RHT -- */ max_nnz = RHT_Consume();
-    /*-- RHT -- */ sum_rows = RHT_Consume();
-    /*-- RHT -- */ min_rows = RHT_Consume();
-    /*-- RHT -- */ max_rows = RHT_Consume();
+//    /*-- RHT -- */ sum_nnz = RHT_Consume();
+//    /*-- RHT -- */ min_nnz = RHT_Consume();
+//    /*-- RHT -- */ max_nnz = RHT_Consume();
+//    /*-- RHT -- */ sum_rows = RHT_Consume();
+//    /*-- RHT -- */ min_rows = RHT_Consume();
+//    /*-- RHT -- */ max_rows = RHT_Consume();
 #endif
 
     // compute the initial condition if not specified by user
@@ -722,7 +721,7 @@ void consumer_thread_func(void *args) {
             init_cond_guess.push_back((double) (0));
         }
 
-        /*-- RHT -- */ t_start = RHT_Consume();
+//        /*-- RHT -- */ t_start = RHT_Consume();
         std::vector<double> init_RHS = evaluate_b(t_start, dae);
         //gmres_consumer(dae->A, init_RHS, init_cond_guess, tol, res, k, init_cond, iters, restarts);
         gmres(dae->A, init_RHS, init_cond_guess, tol, res, k, init_cond, iters, restarts);
