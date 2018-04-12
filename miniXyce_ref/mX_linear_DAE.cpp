@@ -142,6 +142,7 @@ void mX_linear_DAE_utils::destroy(mX_linear_DAE* dae) {
     for (int i = 0; i < dae->b.size(); ++i) {
         destroy_RHS(dae->b[i]);
     }
+
     dae->b.resize(0);
 
     delete dae;

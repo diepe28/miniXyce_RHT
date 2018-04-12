@@ -71,19 +71,24 @@ typedef struct {
 
 void consumer_thread_func(void * args);
 
-void main_replicated_func(double tend, double tstart, YAML_Doc doc, std::string ckt_netlist_filename,
-                          int num_internal_nodes, int num_voltage_sources, int num_inductors,
-                          int num_current_sources, int num_resistors, int num_capacitors, mX_linear_DAE * dae,
-                          bool init_cond_specified, int p, double t_start, double t_step, double t_stop, double tol,
-                          double res, int k, int iters, int restarts, std::vector<double> init_cond, int pid, int n,
-                          double sim_start);
+void main_execution_replicated(int p, int pid, int n, double sim_start, YAML_Doc &doc, const std::string &ckt_netlist_filename,
+                    double t_start, double t_step, double t_stop, double tol, double res, int k, int iters,
+                    int restarts, std::vector<double> &init_cond, bool init_cond_specified, double tstart, double tend,
+                    int num_internal_nodes, int num_voltage_sources, int num_inductors, int num_current_sources,
+                    int num_resistors, int num_capacitors, mX_linear_DAE *dae);
+
+void main_execution(int p, int pid, int n, double sim_start, YAML_Doc &doc, const std::string &ckt_netlist_filename,
+                    double t_start, double t_step, double t_stop, double tol, double res, int k, int iters,
+                    int restarts, std::vector<double> &init_cond, bool init_cond_specified, double tstart, double tend,
+                    int num_internal_nodes, int num_voltage_sources, int num_inductors, int num_current_sources,
+                    int num_resistors, int num_capacitors, mX_linear_DAE *dae);
 
 int main(int argc, char* argv[]) {
     // this is of course, the actual transient simulator
     int p = 1, pid = 0, n = 0, n2 = 0, replicated = 0;
     int producerCore = 0, consumerCore = 2, numThreads = 2;
 #ifdef HAVE_MPI
-    MPI_Init(&argc,&argv);
+    MPI_Init(&argc, &argv);
 
     MPI_Comm_size(MPI_COMM_WORLD, &p);
     MPI_Comm_rank(MPI_COMM_WORLD, &pid);
@@ -102,7 +107,8 @@ int main(int argc, char* argv[]) {
     bool init_cond_specified;
 
     double tstart = mX_timer();
-    get_parms(argc, argv, ckt_netlist_filename, t_start, t_step, t_stop, tol, k, init_cond, init_cond_specified, p, pid);
+    get_parms(argc, argv, ckt_netlist_filename, t_start, t_step, t_stop, tol, k, init_cond, init_cond_specified, p,
+              pid);
     double tend = mX_timer() - tstart;
     doc.add("Parameter_parsing_time", tend);
 
@@ -113,16 +119,17 @@ int main(int argc, char* argv[]) {
     int num_current_sources = 0, num_resistors = 0, num_capacitors = 0;
     int num_current_sources2 = 0, num_resistors2 = 0, num_capacitors2 = 0;
 
-    mX_linear_DAE * dae = parse_netlist(ckt_netlist_filename, p, pid, n, num_internal_nodes, num_voltage_sources,
+    mX_linear_DAE *dae = parse_netlist(ckt_netlist_filename, p, pid, n, num_internal_nodes, num_voltage_sources,
                                        num_current_sources,
                                        num_resistors, num_capacitors, num_inductors);
 
-    if(replicated || true){
+    if (replicated) {
+        exit(1);
         RHT_Replication_Init(numThreads);
 
         mX_linear_DAE *dae2 = parse_netlist(ckt_netlist_filename, p, pid, n2, num_internal_nodes2, num_voltage_sources2,
-                                           num_current_sources2,
-                                           num_resistors2, num_capacitors2, num_inductors2);
+                                            num_current_sources2,
+                                            num_resistors2, num_capacitors2, num_inductors2);
         ConsumerParams *consumerParams = (ConsumerParams *) (malloc(sizeof(ConsumerParams)));
 
         consumerParams->executionCore = consumerCore;
@@ -136,7 +143,7 @@ int main(int argc, char* argv[]) {
         consumerParams->p = p;
         consumerParams->t_step = t_step;
 
-        for(int myIt = 0; myIt < init_cond.size(); myIt++){
+        for (int myIt = 0; myIt < init_cond.size(); myIt++) {
             consumerParams->init_cond[myIt] = init_cond[myIt];
         }
 
@@ -148,18 +155,38 @@ int main(int argc, char* argv[]) {
         }
 
         SetThreadAffinity(producerCore);
-        main_replicated_func(tend, tstart, doc, ckt_netlist_filename, num_internal_nodes, num_voltage_sources,
-                             num_inductors, num_current_sources, num_resistors, num_capacitors, dae,init_cond_specified,
-                             p, t_start, t_step, t_stop, tol, res, k, iters, restarts, init_cond, pid, n, sim_start);
+        main_execution_replicated(p, pid, n, sim_start, doc, ckt_netlist_filename, t_start, t_step, t_stop, tol, res, k, iters,
+                                  restarts, init_cond, init_cond_specified, tstart, tend, num_internal_nodes, num_voltage_sources,
+                                  num_inductors, num_current_sources, num_resistors, num_capacitors, dae);
 
         /*-- RHT -- */ pthread_join(*consumerThreads[0], NULL);
         return 0;
     }
 
+    main_execution(p, pid, n, sim_start, doc, ckt_netlist_filename, t_start, t_step, t_stop, tol, res, k, iters,
+                   restarts, init_cond, init_cond_specified, tstart, tend, num_internal_nodes, num_voltage_sources,
+                   num_inductors, num_current_sources, num_resistors, num_capacitors, dae);
+
+    // Clean up
+    mX_linear_DAE_utils::destroy(dae);
+
+#ifdef HAVE_MPI
+    MPI_Finalize();
+#endif
+
+    return 0;
+}
+
+void main_execution(int p, int pid, int n, double sim_start, YAML_Doc &doc, const std::string &ckt_netlist_filename,
+                    double t_start, double t_step, double t_stop, double tol, double res, int k, int iters,
+                    int restarts, std::vector<double> &init_cond, bool init_cond_specified, double tstart, double tend,
+                    int num_internal_nodes, int num_voltage_sources, int num_inductors, int num_current_sources,
+                    int num_resistors, int num_capacitors, mX_linear_DAE *dae) {
+
     tend = mX_timer() - tstart;
     doc.add("Netlist_parsing_time", tend);
 
-    // document circuit and matrix attributes
+// document circuit and matrix attributes
 
     doc.add("Netlist_file", ckt_netlist_filename.c_str());
 
@@ -183,12 +210,12 @@ int main(int argc, char* argv[]) {
     int min_rows = num_my_rows, max_rows = num_my_rows, sum_rows = num_my_rows;
 
 #ifdef HAVE_MPI
-    MPI_Allreduce(&num_my_nnz,&sum_nnz,1,MPI_INT,MPI_SUM,MPI_COMM_WORLD);
-    MPI_Allreduce(&num_my_nnz,&min_nnz,1,MPI_INT,MPI_MIN,MPI_COMM_WORLD);
-    MPI_Allreduce(&num_my_nnz,&max_nnz,1,MPI_INT,MPI_MAX,MPI_COMM_WORLD);
-    MPI_Allreduce(&num_my_rows,&sum_rows,1,MPI_INT,MPI_SUM,MPI_COMM_WORLD);
-    MPI_Allreduce(&num_my_rows,&min_rows,1,MPI_INT,MPI_MIN,MPI_COMM_WORLD);
-    MPI_Allreduce(&num_my_rows,&max_rows,1,MPI_INT,MPI_MAX,MPI_COMM_WORLD);
+    MPI_Allreduce(&num_my_nnz, &sum_nnz, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(&num_my_nnz, &min_nnz, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD);
+    MPI_Allreduce(&num_my_nnz, &max_nnz, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
+    MPI_Allreduce(&num_my_rows, &sum_rows, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(&num_my_rows, &min_rows, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD);
+    MPI_Allreduce(&num_my_rows, &max_rows, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
 #endif
 
     doc.add("Matrix_attributes", "");
@@ -201,7 +228,7 @@ int main(int argc, char* argv[]) {
     doc.get("Matrix_attributes")->add("NNZ_per_proc_MAX", max_nnz);
     doc.get("Matrix_attributes")->add("NNZ_per_proc_AVG", (double) sum_nnz / p);
 
-    // compute the initial condition if not specified by user
+// compute the initial condition if not specified by user
     int start_row = dae->A->start_row;
     int end_row = dae->A->end_row;
     tstart = mX_timer();
@@ -231,25 +258,26 @@ int main(int argc, char* argv[]) {
     tend = mX_timer() - tstart;
     doc.get("DCOP Calculation")->add("DCOP_calculation_time", tend);
 
-    // write the headers and computed initial condition to file
+// write the headers and computed initial condition to file
     tstart = mX_timer();
     int dot_position = ckt_netlist_filename.find_first_of('.');
 
-    std::string out_filename = ckt_netlist_filename.substr(0, dot_position) + "_tran_results.prn";
+    std::__cxx11::string out_filename = ckt_netlist_filename.substr(0, dot_position) + "_tran_results.prn";
     std::ofstream *outfile = 0;
 
 #ifdef HAVE_MPI
-    // Prepare rcounts and displs for a contiguous gather of the full solution vector.
-    std::vector<int> rcounts( p, 0 ), displs( p, 0 );
+// Prepare rcounts and displs for a contiguous gather of the full solution vector.
+    std::vector<int> rcounts(p, 0), displs(p, 0);
     MPI_Gather(&num_my_rows, 1, MPI_INT, &rcounts[0], 1, MPI_INT, 0, MPI_COMM_WORLD);
-    for (int i=1; i<p ; i++) displs[i] = displs[i-1] + rcounts[i-1];
+    for (int i = 1; i < p; i++) displs[i] = displs[i - 1] + rcounts[i - 1];
 
-    std::vector<double> fullX( sum_rows, 0.0 );
-    MPI_Gatherv(&init_cond[0], num_my_rows, MPI_DOUBLE, &fullX[0], &rcounts[0], &displs[0], MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    std::vector<double> fullX(sum_rows, 0.0);
+    MPI_Gatherv(&init_cond[0], num_my_rows, MPI_DOUBLE, &fullX[0], &rcounts[0], &displs[0], MPI_DOUBLE, 0,
+                MPI_COMM_WORLD);
 #endif
 
     if (pid == 0) {
-        outfile = new std::ofstream(out_filename.data(), std::ios::out);
+        outfile = new std::ofstream(out_filename.data(), std::ios_base::out);
 
         *outfile << std::setw(18) << "TIME";
 
@@ -281,10 +309,10 @@ int main(int argc, char* argv[]) {
 
     double io_tend = mX_timer() - tstart;
 
-    // from now you won't be needing any more Ax = b solves
-    // but you will be needing many (A + B/t_step)x = b solves
-    // so change A to (A + B/t_step) right now
-    // so you won't have to compute it at each time step
+// from now you won't be needing any more Ax = b solves
+// but you will be needing many (A + B/t_step)x = b solves
+// so change A to (A + B/t_step) right now
+// so you won't have to compute it at each time step
 
     tstart = mX_timer();
     distributed_sparse_matrix *A = dae->A;
@@ -308,7 +336,7 @@ int main(int argc, char* argv[]) {
     }
     double matrix_setup_tend = mX_timer() - tstart;
 
-    // this is where the actual transient simulation starts
+// this is where the actual transient simulation starts
 
     tstart = mX_timer();
     double t = t_start + t_step;
@@ -319,12 +347,12 @@ int main(int argc, char* argv[]) {
     while (t < t_stop) {
         trans_steps++;
 
-        // new time point t => new value for b(t)
+// new time point t => new value for b(t)
 
         std::vector<double> b = evaluate_b(t, dae);
 
-        // build the linear system Ax = b that needs to be solved at this time point
-        // Backward Euler is used at every iteration
+// build the linear system Ax = b that needs to be solved at this time point
+// Backward Euler is used at every iteration
 
         std::vector<double> RHS;
         sparse_matrix_vector_product(B, init_cond, RHS);
@@ -334,15 +362,16 @@ int main(int argc, char* argv[]) {
             RHS[i] += b[i];
         }
 
-        // now solve the linear system just built using GMRES(k)
+// now solve the linear system just built using GMRES(k)
         gmres(A, RHS, init_cond, tol, res, k, init_cond, iters, restarts);
         total_gmres_iters += iters;
         total_gmres_res += res;
 
-        // write the results to file
+// write the results to file
         double io_tstart = mX_timer();
 #ifdef HAVE_MPI
-        MPI_Gatherv(&init_cond[0], num_my_rows, MPI_DOUBLE, &fullX[0], &rcounts[0], &displs[0], MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        MPI_Gatherv(&init_cond[0], num_my_rows, MPI_DOUBLE, &fullX[0], &rcounts[0], &displs[0], MPI_DOUBLE, 0,
+                    MPI_COMM_WORLD);
 #endif
         if (pid == 0) {
             outfile->precision(8);
@@ -361,19 +390,16 @@ int main(int argc, char* argv[]) {
 
         io_tend += (mX_timer() - io_tstart);
 
-        // increment t
+// increment t
 
         t += t_step;
-
     }
 
-    // Hurray, the transient simulation is done!
+// Hurray, the transient simulation is done!
     if (pid == 0) {
         outfile->close();
         delete outfile;
     }
-
-    // Document transient simulation performance
 
     tend = mX_timer();
     double sim_end = tend - sim_start;
@@ -392,27 +418,18 @@ int main(int argc, char* argv[]) {
     doc.add("Total Simulation Time", sim_end);
 
     if (pid == 0) { // Only PE 0 needs to compute and report timing results
-
-        std::string yaml = doc.generateYAML();
+        std::__cxx11::string yaml = doc.generateYAML();
         std::cout << yaml;
     }
-
-    // Clean up
-    mX_linear_DAE_utils::destroy(dae);
-
-#ifdef HAVE_MPI
-    MPI_Finalize();
-#endif
-
-    return 0;
 }
 
-void main_replicated_func(double tend, double tstart, YAML_Doc doc, std::string ckt_netlist_filename,
-                          int num_internal_nodes, int num_voltage_sources, int num_inductors,
-                          int num_current_sources, int num_resistors, int num_capacitors, mX_linear_DAE * dae,
-                          bool init_cond_specified, int p, double t_start, double t_step, double t_stop, double tol,
-                          double res, int k, int iters, int restarts, std::vector<double> init_cond, int pid, int n,
-                          double sim_start){
+
+void main_execution_replicated(int p, int pid, int n, double sim_start, YAML_Doc &doc, const std::string &ckt_netlist_filename,
+                          double t_start, double t_step, double t_stop, double tol, double res, int k, int iters,
+                          int restarts, std::vector<double> &init_cond, bool init_cond_specified, double tstart, double tend,
+                          int num_internal_nodes, int num_voltage_sources, int num_inductors, int num_current_sources,
+                          int num_resistors, int num_capacitors, mX_linear_DAE *dae) {
+
     tend = mX_timer() - tstart;
     doc.add("Netlist_parsing_time", tend);
 
@@ -440,18 +457,18 @@ void main_replicated_func(double tend, double tstart, YAML_Doc doc, std::string 
     int min_rows = num_my_rows, max_rows = num_my_rows, sum_rows = num_my_rows;
 
 #ifdef HAVE_MPI
-    MPI_Allreduce(&num_my_nnz,&sum_nnz,1,MPI_INT,MPI_SUM,MPI_COMM_WORLD);
-    MPI_Allreduce(&num_my_nnz,&min_nnz,1,MPI_INT,MPI_MIN,MPI_COMM_WORLD);
-    MPI_Allreduce(&num_my_nnz,&max_nnz,1,MPI_INT,MPI_MAX,MPI_COMM_WORLD);
-    MPI_Allreduce(&num_my_rows,&sum_rows,1,MPI_INT,MPI_SUM,MPI_COMM_WORLD);
-    MPI_Allreduce(&num_my_rows,&min_rows,1,MPI_INT,MPI_MIN,MPI_COMM_WORLD);
-    MPI_Allreduce(&num_my_rows,&max_rows,1,MPI_INT,MPI_MAX,MPI_COMM_WORLD);
-    /*-- RHT -- */ RHT_Produce(sum_nnz);
-    /*-- RHT -- */ RHT_Produce(min_nnz);
-    /*-- RHT -- */ RHT_Produce(max_nnz);
-    /*-- RHT -- */ RHT_Produce(sum_rows);
-    /*-- RHT -- */ RHT_Produce(min_rows);
-    /*-- RHT -- */ RHT_Produce(max_rows);
+    MPI_Allreduce(&num_my_nnz, &sum_nnz, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(&num_my_nnz, &min_nnz, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD);
+    MPI_Allreduce(&num_my_nnz, &max_nnz, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
+    MPI_Allreduce(&num_my_rows, &sum_rows, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(&num_my_rows, &min_rows, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD);
+    MPI_Allreduce(&num_my_rows, &max_rows, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
+//    /*-- RHT -- */ RHT_Produce(sum_nnz);
+//    /*-- RHT -- */ RHT_Produce(min_nnz);
+//    /*-- RHT -- */ RHT_Produce(max_nnz);
+//    /*-- RHT -- */ RHT_Produce(sum_rows);
+//    /*-- RHT -- */ RHT_Produce(min_rows);
+//    /*-- RHT -- */ RHT_Produce(max_rows);
 #endif
 
     doc.add("Matrix_attributes", "");
@@ -476,9 +493,11 @@ void main_replicated_func(double tend, double tstart, YAML_Doc doc, std::string 
             init_cond_guess.push_back((double) (0));
         }
 
-        std::vector<double> init_RHS = evaluate_b_producer(t_start, dae);
+        //std::vector<double> init_RHS = evaluate_b_producer(t_start, dae);
+        std::vector<double> init_RHS = evaluate_b(t_start, dae);
 
-        gmres_producer(dae->A, init_RHS, init_cond_guess, tol, res, k, init_cond, iters, restarts);
+//        gmres_producer(dae->A, init_RHS, init_cond_guess, tol, res, k, init_cond, iters, restarts);
+        gmres(dae->A, init_RHS, init_cond_guess, tol, res, k, init_cond, iters, restarts);
 
         doc.add("DCOP Calculation", "");
         doc.get("DCOP Calculation")->add("Init_cond_specified", false);
@@ -503,12 +522,13 @@ void main_replicated_func(double tend, double tstart, YAML_Doc doc, std::string 
 
 #ifdef HAVE_MPI
     // Prepare rcounts and displs for a contiguous gather of the full solution vector.
-    std::vector<int> rcounts( p, 0 ), displs( p, 0 );
+    std::vector<int> rcounts(p, 0), displs(p, 0);
     MPI_Gather(&num_my_rows, 1, MPI_INT, &rcounts[0], 1, MPI_INT, 0, MPI_COMM_WORLD);
-    for (int i=1; i<p ; i++) displs[i] = displs[i-1] + rcounts[i-1];
+    for (int i = 1; i < p; i++) displs[i] = displs[i - 1] + rcounts[i - 1];
 
-    std::vector<double> fullX( sum_rows, 0.0 );
-    MPI_Gatherv(&init_cond[0], num_my_rows, MPI_DOUBLE, &fullX[0], &rcounts[0], &displs[0], MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    std::vector<double> fullX(sum_rows, 0.0);
+    MPI_Gatherv(&init_cond[0], num_my_rows, MPI_DOUBLE, &fullX[0], &rcounts[0], &displs[0], MPI_DOUBLE, 0,
+                MPI_COMM_WORLD);
 #endif
 
     if (pid == 0) {
@@ -564,7 +584,8 @@ void main_replicated_func(double tend, double tstart, YAML_Doc doc, std::string 
             int col_idx = curr->column;
             double value = (curr->value) / t_step;
 
-            distributed_sparse_matrix_add_to_producer(A, row_idx, col_idx, value, n, p);
+            //distributed_sparse_matrix_add_to_producer(A, row_idx, col_idx, value, n, p);
+            distributed_sparse_matrix_add_to(A, row_idx, col_idx, value, n, p);
 
             curr = curr->next_in_row;
         }
@@ -590,7 +611,8 @@ void main_replicated_func(double tend, double tstart, YAML_Doc doc, std::string 
         // Backward Euler is used at every iteration
 
         std::vector<double> RHS;
-        sparse_matrix_vector_product_producer(B, init_cond, RHS);
+        //sparse_matrix_vector_product_producer(B, init_cond, RHS);
+        sparse_matrix_vector_product(B, init_cond, RHS);
 
         for (int i = 0; i < num_my_rows; i++) {
             RHS[i] /= t_step;
@@ -598,14 +620,16 @@ void main_replicated_func(double tend, double tstart, YAML_Doc doc, std::string 
         }
 
         // now solve the linear system just built using GMRES(k)
-        gmres_producer(A, RHS, init_cond, tol, res, k, init_cond, iters, restarts);
+        //gmres_producer(A, RHS, init_cond, tol, res, k, init_cond, iters, restarts);
+        gmres(A, RHS, init_cond, tol, res, k, init_cond, iters, restarts);
         total_gmres_iters += iters;
         total_gmres_res += res;
 
         // write the results to file
         double io_tstart = mX_timer();
 #ifdef HAVE_MPI
-        MPI_Gatherv(&init_cond[0], num_my_rows, MPI_DOUBLE, &fullX[0], &rcounts[0], &displs[0], MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        MPI_Gatherv(&init_cond[0], num_my_rows, MPI_DOUBLE, &fullX[0], &rcounts[0], &displs[0], MPI_DOUBLE, 0,
+                    MPI_COMM_WORLD);
 #endif
         if (pid == 0) {
             outfile->precision(8);
@@ -659,17 +683,9 @@ void main_replicated_func(double tend, double tstart, YAML_Doc doc, std::string 
         std::string yaml = doc.generateYAML();
         std::cout << yaml;
     }
-
-    // Clean up
-    mX_linear_DAE_utils::destroy(dae);
-
-#ifdef HAVE_MPI
-    MPI_Finalize();
-#endif
-
 }
 
-void consumer_thread_func(void *args){
+void consumer_thread_func(void *args) {
     ConsumerParams *params = (ConsumerParams *) args;
     SetThreadAffinity(params->executionCore);
 
@@ -708,7 +724,8 @@ void consumer_thread_func(void *args){
 
         /*-- RHT -- */ t_start = RHT_Consume();
         std::vector<double> init_RHS = evaluate_b(t_start, dae);
-        gmres_consumer(dae->A, init_RHS, init_cond_guess, tol, res, k, init_cond, iters, restarts);
+        //gmres_consumer(dae->A, init_RHS, init_cond_guess, tol, res, k, init_cond, iters, restarts);
+        gmres(dae->A, init_RHS, init_cond_guess, tol, res, k, init_cond, iters, restarts);
     }
 
     // from now you won't be needing any more Ax = b solves
@@ -730,7 +747,8 @@ void consumer_thread_func(void *args){
             int col_idx = curr->column;
             double value = (curr->value) / t_step;
 
-            distributed_sparse_matrix_add_to_consumer(A, row_idx, col_idx, value, n, p);
+            //distributed_sparse_matrix_add_to_consumer(A, row_idx, col_idx, value, n, p);
+            distributed_sparse_matrix_add_to(A, row_idx, col_idx, value, n, p);
 
             curr = curr->next_in_row;
         }
@@ -747,13 +765,15 @@ void consumer_thread_func(void *args){
 
         // new time point t => new value for b(t)
 
-        std::vector<double> b = evaluate_b_consumer(t, dae);
+        //std::vector<double> b = evaluate_b_consumer(t, dae);
+        std::vector<double> b = evaluate_b(t, dae);
 
         // build the linear system Ax = b that needs to be solved at this time point
         // Backward Euler is used at every iteration
 
         std::vector<double> RHS;
-        sparse_matrix_vector_product_consumer(B, init_cond, RHS);
+        //sparse_matrix_vector_product_consumer(B, init_cond, RHS);
+        sparse_matrix_vector_product(B, init_cond, RHS);
 
         for (int i = 0; i < num_my_rows; i++) {
             RHS[i] /= t_step;
@@ -761,7 +781,8 @@ void consumer_thread_func(void *args){
         }
 
         // now solve the linear system just built using GMRES(k)
-        gmres_consumer(A, RHS, init_cond, tol, res, k, init_cond, iters, restarts);
+        //gmres_consumer(A, RHS, init_cond, tol, res, k, init_cond, iters, restarts);
+        gmres(A, RHS, init_cond, tol, res, k, init_cond, iters, restarts);
         total_gmres_iters += iters;
         total_gmres_res += res;
 
@@ -775,3 +796,4 @@ void consumer_thread_func(void *args){
     // Clean up
     mX_linear_DAE_utils::destroy(dae);
 }
+

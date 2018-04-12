@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.8)
 project(miniXyceRHT)
 
-set(CMAKE_BUILD_TYPE Release) # optimizations, but debuging is not allowed
-#set(CMAKE_BUILD_TYPE Debug) # NO optimizations, debuging allowed
+#set(CMAKE_BUILD_TYPE Release) # optimizations, but debuging is not allowed
+set(CMAKE_BUILD_TYPE Debug) # NO optimizations, debuging allowed
 
 #set(CMAKE_VERBOSE_MAKEFILE ON)
 
@@ -15,7 +15,8 @@ set(CMAKE_CXX_STANDARD 11)
 
 #-ftree-vectorize
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -funroll-all-loops -lm -DUSING_MPI=1") #just for gcc
+#-DUSING_MPI=1
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -funroll-all-loops") #just for gcc
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHAVE_MPI -DMPICH_IGNORE_CXX_SEEK -DMINIXYCE_INFO=1")
 #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DPRINT_OUTPUT=0")

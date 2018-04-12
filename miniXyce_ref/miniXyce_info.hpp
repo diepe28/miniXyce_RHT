@@ -8,6 +8,6 @@
 
 #define MINIXYCE_CXX "'/usr/bin/mpicxx'"
 #define MINIXYCE_CXX_VERSION "'g++ (Ubuntu 7.2.0-13ubuntu1~16.04.york0) 7.2.0'"
-#define MINIXYCE_CXXFLAGS "'-O3 -funroll-all-loops '"
+#define MINIXYCE_CXXFLAGS "'-O3 -funroll-all-loops -lpthread '"
 
 #endif
