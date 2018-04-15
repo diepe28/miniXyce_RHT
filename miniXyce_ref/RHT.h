@@ -29,7 +29,7 @@
 #define INLINE inline __attribute__((always_inline))
 #define EPSILON 0.000001
 #define fequal(a,b) (fabs(a-b) < EPSILON)
-#define TEST_NUM_RUNS 100
+#define TEST_NUM_RUNS 10000
 
 typedef struct {
     volatile int deqPtr;
@@ -252,10 +252,10 @@ static void createConsumerThreads(int numThreads) {
     int i;
 
     consumerThreadCount = numThreads;
-    consumerThreads = (pthread_t **) malloc(sizeof(pthread_t *) * consumerThreadCount);
+    //consumerThreads = (pthread_t **) malloc(sizeof(pthread_t *) * consumerThreadCount);
 
-    for (i = 0; i < consumerThreadCount; i++)
-        consumerThreads[i] = (pthread_t *) malloc(sizeof(pthread_t));
+    //for (i = 0; i < consumerThreadCount; i++)
+        //consumerThreads[i] = (pthread_t *) malloc(sizeof(pthread_t));
 }
 
 static void RHT_Replication_Init(int numThreads) {
@@ -268,9 +268,9 @@ static void RHT_Replication_Finish() {
         free((void *) globalQueue.content);
     int i = 0;
 
-    for (i = 0; i < consumerThreadCount; i++)
-        free(consumerThreads[i]);
-    free(consumerThreads);
+//    for (i = 0; i < consumerThreadCount; i++)
+//        free(consumerThreads[i]);
+//    free(consumerThreads);
 }
 
 //////////// INTERNAL QUEUE METHODS BODY //////////////////

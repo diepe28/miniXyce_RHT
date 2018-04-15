@@ -35,6 +35,7 @@ string YAML_Doc::generateYAML() {
     yaml = yaml + "Mini-Application Version: " + miniAppVersion + "\n";
     for (size_t i = 0; i < children.size(); i++) {
         yaml = yaml + children[i]->printYAML("");
+        delete children[i];
     }
 
     time_t rawtime;
