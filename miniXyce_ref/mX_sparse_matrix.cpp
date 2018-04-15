@@ -625,8 +625,6 @@ void mX_matrix_utils::sparse_matrix_vector_product_producer(distributed_sparse_m
     /*-- RHT -- */ RHT_Produce_Secure(start_row);
     /*-- RHT -- */ RHT_Produce_Secure(end_row);
 
-    printf("Producer: %d, %d\n", start_row, end_row);
-
 #ifdef HAVE_MPI
     // ok, now's the time to follow the send instructions that each pid has been maintaining
 
@@ -709,8 +707,6 @@ void mX_matrix_utils::sparse_matrix_vector_product_consumer(distributed_sparse_m
     int end_row = A->end_row;
     /*-- RHT -- */ RHT_Consume_Check(start_row);
     /*-- RHT -- */ RHT_Consume_Check(end_row);
-
-    printf("Consumer: %d, %d\n", start_row, end_row);
 
 #ifdef HAVE_MPI
     // ok, now's the time to follow the send instructions that each pid has been maintaining
@@ -1046,16 +1042,12 @@ void mX_matrix_utils::gmres_producer(distributed_sparse_matrix* A, std::vector<d
     x = x0;
 
     std::vector<double> temp1;
-//    /*-- RHT -- */ sparse_matrix_vector_product_producer(A, x, temp1);
-    /*-- RHT -- */ sparse_matrix_vector_product(A, x, temp1);
+    /*-- RHT -- */ sparse_matrix_vector_product_producer(A, x, temp1);
 
-//    int i = 0;
-//    replicate_loop_producer(0, temp1.size(), i, i++, temp1[i], temp1[i] -= b[i])
-    for (int i = 0; i < temp1.size(); i++) {
-        temp1[i] -= b[i];
-    }
+    int i = 0;
+    replicate_loop_producer(0, temp1.size(), i, i++, temp1[i], temp1[i] -= b[i])
 
-    err = norm(temp1);
+    err = norm_producer(temp1);
     /*-- RHT -- */ RHT_Produce_Secure(err);
 
     restarts = -1;
@@ -1071,30 +1063,21 @@ void mX_matrix_utils::gmres_producer(distributed_sparse_matrix* A, std::vector<d
 
         std::vector<double> temp1;
         std::vector<std::vector<double> > V;
-//        /*-- RHT -- */ sparse_matrix_vector_product_producer(A, x, temp1);
-        /*-- RHT -- */ sparse_matrix_vector_product(A, x, temp1);
+        /*-- RHT -- */ sparse_matrix_vector_product_producer(A, x, temp1);
 
         int i = start_row;
-        for (; i <= end_row; i++) {
-            temp1[i - start_row] = (temp1[i - start_row] - b[i - start_row]) * (double) (-1);
+        replicate_loop_producer(start_row, end_row + 1, i, i++,
+                                temp1[i - start_row],
+                                temp1[i - start_row] = (temp1[i - start_row] - b[i - start_row]) * (double) (-1);
+                                        std::vector<double> temp2;
+                                        temp2.push_back(temp1[i - start_row]);
+                                        V.push_back(temp2);)
 
-            std::vector<double> temp2;
-            temp2.push_back(temp1[i - start_row]);
-            V.push_back(temp2);
-        }
-//        replicate_loop_producer(start_row, end_row + 1, i, i++,
-//                                temp1[i - start_row],
-//                                temp1[i - start_row] = (temp1[i - start_row] - b[i - start_row]) * (double) (-1);
-//                                        std::vector<double> temp2; temp2.push_back(temp1[i - start_row]); V.push_back(temp2);)
-
-        double beta = norm(temp1);
+        double beta = norm_producer(temp1);
         /*-- RHT -- */ RHT_Produce_Secure(beta);
 
         i = start_row;
-        //replicate_loop_producer(start_row, end_row+1, i, i++, V[i - start_row][0], V[i - start_row][0] /= beta)
-        for (i = start_row; i <= end_row; i++) {
-            V[i - start_row][0] /= beta;
-        }
+        replicate_loop_producer(start_row, end_row + 1, i, i++, V[i - start_row][0], V[i - start_row][0] /= beta)
 
         err = beta;
         iters = 0;
@@ -1120,7 +1103,7 @@ void mX_matrix_utils::gmres_producer(distributed_sparse_matrix* A, std::vector<d
 
         while ((err > tol) && (iters < k)) {
             iters++;
-            /*-- RHT -- */ RHT_Produce_Volatile(iters);
+            /*-- RHT -- */ RHT_Produce_Secure(iters);
 
             // Mr.GMRES is now going to update the V matrix
             // for which he will require a matrix vector multiplication
@@ -1131,8 +1114,7 @@ void mX_matrix_utils::gmres_producer(distributed_sparse_matrix* A, std::vector<d
             for (int i = start_row; i <= end_row; i++) {
                 temp1.push_back(V[i - start_row][iters - 1]);
             }
-//            /*-- RHT -- */ sparse_matrix_vector_product_producer(A, temp1, temp2);
-            /*-- RHT -- */ sparse_matrix_vector_product(A, temp1, temp2);
+            /*-- RHT -- */ sparse_matrix_vector_product_producer(A, temp1, temp2);
 
             // Right, Mr.GMRES now has the matrix vector product
             // now he will orthogonalize this vector with the previous ones
@@ -1145,13 +1127,9 @@ void mX_matrix_utils::gmres_producer(distributed_sparse_matrix* A, std::vector<d
                 double global_dot;
 
                 int j = start_row;
-
-//                replicate_loop_producer(start_row, end_row+1, j, j++,
-//                                        local_dot,
-//                                        local_dot += temp2[j - start_row] * V[j - start_row][i])
-                for (j = start_row; j <= end_row; j++) {
-                    local_dot += temp2[j - start_row] * V[j - start_row][i];
-                }
+                replicate_loop_producer(start_row, end_row + 1, j, j++,
+                                        local_dot,
+                                        local_dot += temp2[j - start_row] * V[j - start_row][i])
 #ifdef HAVE_MPI
                 MPI_Allreduce(&local_dot,&global_dot,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
 #else
@@ -1159,31 +1137,24 @@ void mX_matrix_utils::gmres_producer(distributed_sparse_matrix* A, std::vector<d
 #endif
                 /*-- RHT -- */ RHT_Produce_Secure(global_dot);
                 j = start_row;
-//                replicate_loop_producer(start_row, end_row+1, j, j++,
-//                                        temp2[j - start_row],
-//                                        temp2[j - start_row] -= global_dot * V[j - start_row][i])
-                for (j = start_row; j <= end_row; j++) {
-                    temp2[j - start_row] -= global_dot * V[j - start_row][i];
-                }
+                replicate_loop_producer(start_row, end_row + 1, j, j++,
+                                        temp2[j - start_row],
+                                        temp2[j - start_row] -= global_dot * V[j - start_row][i])
 
                 new_col_H.push_back(global_dot);
             }
 
 
-            double normTemp2 = norm(temp2);
+            double normTemp2 = norm_producer(temp2);
             /*-- RHT -- */ RHT_Produce_Secure(normTemp2);
             new_col_H.push_back(normTemp2);
 
             int i = start_row;
 
-            for (; i <= end_row; i++) {
-                temp2[i - start_row] /= new_col_H.back();
-                V[i - start_row].push_back(temp2[i - start_row]);
-            }
-
-//            replicate_loop_producer(start_row, end_row+1, i, i++,
-//                                    temp2[i - start_row],
-//                                    temp2[i - start_row] /= new_col_H.back(); V[i - start_row].push_back(temp2[i - start_row]);)
+            replicate_loop_producer(start_row, end_row + 1, i, i++,
+                                    temp2[i - start_row],
+                                    temp2[i - start_row] /= new_col_H.back();
+                                            V[i - start_row].push_back(temp2[i - start_row]);)
 
             // Right, Mr.GMRES has successfully updated V
             // on the side, he has also been computing the new column of the Hessenberg matrix
@@ -1191,19 +1162,12 @@ void mX_matrix_utils::gmres_producer(distributed_sparse_matrix* A, std::vector<d
             // and he will also add a new sine and a new cosine for future use
 
             i = 0;
-            for (; i < iters - 1; i++) {
-                double old_i = new_col_H[i];
-                double old_i_plus_one = new_col_H[i + 1];
-
-                new_col_H[i] = cosines[i] * old_i + sines[i] * old_i_plus_one;
-                new_col_H[i + 1] = -sines[i] * old_i + cosines[i] * old_i_plus_one;
-            }
-//            replicate_loop_producer(0, iters-1, i, i++,
-//                                    new_col_H[i],
-//                                    double old_i = new_col_H[i];
-//                                            double old_i_plus_one = new_col_H[i + 1];
-//                                            new_col_H[i] = cosines[i] * old_i + sines[i] * old_i_plus_one;
-//                                            new_col_H[i + 1] = -sines[i] * old_i + cosines[i] * old_i_plus_one;)
+            replicate_loop_producer(0, iters - 1, i, i++,
+                                    new_col_H[i],
+                                    double old_i = new_col_H[i];
+                                            double old_i_plus_one = new_col_H[i + 1];
+                                            new_col_H[i] = cosines[i] * old_i + sines[i] * old_i_plus_one;
+                                            new_col_H[i + 1] = -sines[i] * old_i + cosines[i] * old_i_plus_one;)
 
             double r = std::sqrt(new_col_H[iters - 1] * new_col_H[iters - 1] + new_col_H[iters] * new_col_H[iters]);
             /*-- RHT -- */ RHT_Produce_Secure(r);
@@ -1255,11 +1219,7 @@ void mX_matrix_utils::gmres_producer(distributed_sparse_matrix* A, std::vector<d
             double sum = (double) (0);
 
             int j = iters - 1;
-            // inverted loop
-//            replicate_loop_producer(i, iters -1, j, j--, sum, sum += R[j][i] * y[iters - 1 - j])
-            for (j = iters - 1; j > i; j--) {
-                sum += R[j][i] * y[iters - 1 - j];
-            }
+            replicate_loop_producer(i, iters -1, j, j--, sum, sum += R[j][i] * y[iters - 1 - j])
 
             tempVar = (g[i] - sum) / R[i][i];
 
@@ -1273,11 +1233,7 @@ void mX_matrix_utils::gmres_producer(distributed_sparse_matrix* A, std::vector<d
             double sum = (double) (0);
 
             int j = iters - 1;
-            // inverted loop
-//            replicate_loop_producer(-1, iters - 1, j, j--, sum, sum += y[iters - 1 - j] * V[i - start_row][j])
-            for (j = iters - 1; j >= 0; j--) {
-                sum += y[iters - 1 - j] * V[i - start_row][j];
-            }
+            replicate_loop_producer(-1, iters - 1, j, j--, sum, sum += y[iters - 1 - j] * V[i - start_row][j])
 
             x[i - start_row] += sum;
             /*-- RHT -- */ RHT_Produce_Secure(x[i - start_row]);
@@ -1310,16 +1266,12 @@ void mX_matrix_utils::gmres_consumer(distributed_sparse_matrix* A, std::vector<d
 
     x = x0;
     std::vector<double> temp1;
-//    /*-- RHT -- */ sparse_matrix_vector_product_consumer(A, x, temp1);
-    /*-- RHT -- */ sparse_matrix_vector_product(A, x, temp1);
+    /*-- RHT -- */ sparse_matrix_vector_product_consumer(A, x, temp1);
 
-//    int i = 0;
-//    replicate_loop_consumer(0, temp1.size(), i, i++, temp1[i], temp1[i] -= b[i])
-    for (int i = 0; i < temp1.size(); i++) {
-        temp1[i] -= b[i];
-    }
+    int i = 0;
+    replicate_loop_consumer(0, temp1.size(), i, i++, temp1[i], temp1[i] -= b[i])
 
-    err = norm(temp1);
+    err = norm_consumer(temp1);
     /*-- RHT -- */ RHT_Consume_Check(err);
 
     restarts = -1;
@@ -1335,30 +1287,21 @@ void mX_matrix_utils::gmres_consumer(distributed_sparse_matrix* A, std::vector<d
 
         std::vector<double> temp1;
         std::vector<std::vector<double> > V;
-//        /*-- RHT -- */ sparse_matrix_vector_product_consumer(A, x, temp1);
-        /*-- RHT -- */ sparse_matrix_vector_product(A, x, temp1);
+        /*-- RHT -- */ sparse_matrix_vector_product_consumer(A, x, temp1);
 
         int i = start_row;
-        for (; i <= end_row; i++) {
-            temp1[i - start_row] = (temp1[i - start_row] - b[i - start_row]) * (double) (-1);
+        replicate_loop_consumer(start_row, end_row + 1, i, i++,
+                                temp1[i - start_row],
+                                temp1[i - start_row] = (temp1[i - start_row] - b[i - start_row]) * (double) (-1);
+                                        std::vector<double> temp2;
+                                        temp2.push_back(temp1[i - start_row]);
+                                        V.push_back(temp2);)
 
-            std::vector<double> temp2;
-            temp2.push_back(temp1[i - start_row]);
-            V.push_back(temp2);
-        }
-//        replicate_loop_consumer(start_row, end_row + 1, i, i++,
-//                                temp1[i - start_row],
-//                                temp1[i - start_row] = (temp1[i - start_row] - b[i - start_row]) * (double) (-1);
-//                                        std::vector<double> temp2; temp2.push_back(temp1[i - start_row]); V.push_back(temp2);)
-
-        double beta = norm(temp1);
+        double beta = norm_consumer(temp1);
         /*-- RHT -- */ RHT_Consume_Check(beta);
 
         i = start_row;
-        //replicate_loop_consumer(start_row, end_row+1, i, i++, V[i - start_row][0], V[i - start_row][0] /= beta)
-        for (i = start_row; i <= end_row; i++) {
-            V[i - start_row][0] /= beta;
-        }
+        replicate_loop_consumer(start_row, end_row + 1, i, i++, V[i - start_row][0], V[i - start_row][0] /= beta)
 
         err = beta;
         iters = 0;
@@ -1384,7 +1327,7 @@ void mX_matrix_utils::gmres_consumer(distributed_sparse_matrix* A, std::vector<d
 
         while ((err > tol) && (iters < k)) {
             iters++;
-            /*-- RHT -- */ RHT_Consume_Volatile(iters);
+            /*-- RHT -- */ RHT_Consume_Check(iters);
 
             // Mr.GMRES is now going to update the V matrix
             // for which he will require a matrix vector multiplication
@@ -1395,8 +1338,7 @@ void mX_matrix_utils::gmres_consumer(distributed_sparse_matrix* A, std::vector<d
             for (int i = start_row; i <= end_row; i++) {
                 temp1.push_back(V[i - start_row][iters - 1]);
             }
-//            /*-- RHT -- */ sparse_matrix_vector_product_consumer(A, temp1, temp2);
-            /*-- RHT -- */ sparse_matrix_vector_product(A, temp1, temp2);
+            /*-- RHT -- */ sparse_matrix_vector_product_consumer(A, temp1, temp2);
 
             // Right, Mr.GMRES now has the matrix vector product
             // now he will orthogonalize this vector with the previous ones
@@ -1410,12 +1352,9 @@ void mX_matrix_utils::gmres_consumer(distributed_sparse_matrix* A, std::vector<d
 
                 int j = start_row;
 
-//                replicate_loop_consumer(start_row, end_row+1, j, j++,
-//                                        local_dot,
-//                                        local_dot += temp2[j - start_row] * V[j - start_row][i])
-                for (j = start_row; j <= end_row; j++) {
-                    local_dot += temp2[j - start_row] * V[j - start_row][i];
-                }
+                replicate_loop_consumer(start_row, end_row + 1, j, j++,
+                                        local_dot,
+                                        local_dot += temp2[j - start_row] * V[j - start_row][i])
 #ifdef HAVE_MPI
                 MPI_Allreduce(&local_dot,&global_dot,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
 #else
@@ -1423,30 +1362,23 @@ void mX_matrix_utils::gmres_consumer(distributed_sparse_matrix* A, std::vector<d
 #endif
                 /*-- RHT -- */ RHT_Consume_Check(global_dot);
                 j = start_row;
-//                replicate_loop_consumer(start_row, end_row+1, j, j++,
-//                                        temp2[j - start_row],
-//                                        temp2[j - start_row] -= global_dot * V[j - start_row][i])
-                for (j = start_row; j <= end_row; j++) {
-                    temp2[j - start_row] -= global_dot * V[j - start_row][i];
-                }
+                replicate_loop_consumer(start_row, end_row + 1, j, j++,
+                                        temp2[j - start_row],
+                                        temp2[j - start_row] -= global_dot * V[j - start_row][i])
 
                 new_col_H.push_back(global_dot);
             }
 
-            double normTemp2 = norm(temp2);
+            double normTemp2 = norm_consumer(temp2);
             /*-- RHT -- */ RHT_Consume_Check(normTemp2);
             new_col_H.push_back(normTemp2);
 
             int i = start_row;
 
-            for (; i <= end_row; i++) {
-                temp2[i - start_row] /= new_col_H.back();
-                V[i - start_row].push_back(temp2[i - start_row]);
-            }
-
-//            replicate_loop_consumer(start_row, end_row+1, i, i++,
-//                                    temp2[i - start_row],
-//                                    temp2[i - start_row] /= new_col_H.back(); V[i - start_row].push_back(temp2[i - start_row]);)
+            replicate_loop_consumer(start_row, end_row + 1, i, i++,
+                                    temp2[i - start_row],
+                                    temp2[i - start_row] /= new_col_H.back();
+                                            V[i - start_row].push_back(temp2[i - start_row]);)
 
             // Right, Mr.GMRES has successfully updated V
             // on the side, he has also been computing the new column of the Hessenberg matrix
@@ -1454,19 +1386,12 @@ void mX_matrix_utils::gmres_consumer(distributed_sparse_matrix* A, std::vector<d
             // and he will also add a new sine and a new cosine for future use
 
             i = 0;
-            for (; i < iters - 1; i++) {
-                double old_i = new_col_H[i];
-                double old_i_plus_one = new_col_H[i + 1];
-
-                new_col_H[i] = cosines[i] * old_i + sines[i] * old_i_plus_one;
-                new_col_H[i + 1] = -sines[i] * old_i + cosines[i] * old_i_plus_one;
-            }
-//            replicate_loop_consumer(0, iters-1, i, i++,
-//                                    new_col_H[i],
-//                                    double old_i = new_col_H[i];
-//                                            double old_i_plus_one = new_col_H[i + 1];
-//                                            new_col_H[i] = cosines[i] * old_i + sines[i] * old_i_plus_one;
-//                                            new_col_H[i + 1] = -sines[i] * old_i + cosines[i] * old_i_plus_one;)
+            replicate_loop_consumer(0, iters - 1, i, i++,
+                                    new_col_H[i],
+                                    double old_i = new_col_H[i];
+                                            double old_i_plus_one = new_col_H[i + 1];
+                                            new_col_H[i] = cosines[i] * old_i + sines[i] * old_i_plus_one;
+                                            new_col_H[i + 1] = -sines[i] * old_i + cosines[i] * old_i_plus_one;)
 
             double r = std::sqrt(new_col_H[iters - 1] * new_col_H[iters - 1] + new_col_H[iters] * new_col_H[iters]);
             /*-- RHT -- */ RHT_Consume_Check(r);
@@ -1518,11 +1443,7 @@ void mX_matrix_utils::gmres_consumer(distributed_sparse_matrix* A, std::vector<d
             double sum = (double) (0);
 
             int j = iters - 1;
-            // inverted loop
-//            replicate_loop_consumer(i, iters -1, j, j--, sum, sum += R[j][i] * y[iters - 1 - j])
-            for (j = iters - 1; j > i; j--) {
-                sum += R[j][i] * y[iters - 1 - j];
-            }
+            replicate_loop_consumer(i, iters - 1, j, j--, sum, sum += R[j][i] * y[iters - 1 - j])
 
             tempVar = (g[i] - sum) / R[i][i];
 
@@ -1531,16 +1452,11 @@ void mX_matrix_utils::gmres_consumer(distributed_sparse_matrix* A, std::vector<d
         }
 
         // ok, so y is ready (although it's stored upside down)
-
         for (int i = start_row; i <= end_row; i++) {
             double sum = (double) (0);
 
             int j = iters - 1;
-            // inverted loop
-//            replicate_loop_consumer(-1, iters - 1, j, j--, sum, sum += y[iters - 1 - j] * V[i - start_row][j])
-            for (j = iters - 1; j >= 0; j--) {
-                sum += y[iters - 1 - j] * V[i - start_row][j];
-            }
+            replicate_loop_consumer(-1, iters - 1, j, j--, sum, sum += y[iters - 1 - j] * V[i - start_row][j])
 
             x[i - start_row] += sum;
             /*-- RHT -- */ RHT_Consume_Check(x[i - start_row]);

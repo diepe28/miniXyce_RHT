@@ -29,7 +29,7 @@
 #define INLINE inline __attribute__((always_inline))
 #define EPSILON 0.000001
 #define fequal(a,b) (fabs(a-b) < EPSILON)
-#define TEST_NUM_RUNS 1000
+#define TEST_NUM_RUNS 100
 
 typedef struct {
     volatile int deqPtr;
@@ -219,7 +219,7 @@ extern long consumerCount;
 
 #define RHT_Consume_Volatile(volValue)                          \
     while (globalQueue.checkState == 1) asm("pause");           \
-    if (!fequal(volValue, globalQueue.volatileValue)){                 \
+    if (!fequal(volValue, globalQueue.volatileValue)){          \
         Report_Soft_Error(volValue, globalQueue.volatileValue)  \
     }                                                           \
     globalQueue.checkState = 1;

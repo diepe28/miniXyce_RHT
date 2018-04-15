@@ -88,8 +88,15 @@ void main_execution(int p, int pid, int n, double sim_start, std::string &ckt_ne
 
 int main(int argc, char* argv[]) {
     // this is of course, the actual transient simulator
-    int p = 1, pid = 0, n = 0, replicated = 1;
+    int p = 1, pid = 0, n = 0, replicated;
     int producerCore = 0, consumerCore = 2, numThreads = 2;
+
+    //dperez, example of execution: -c tests/cir1.net 1
+    if(argc == 4)
+    {
+        replicated = atoi(argv[3]) == 1 ? 1 : 0;
+        argc--;
+    }
 
 #ifdef HAVE_MPI
     MPI_Init(&argc, &argv);
@@ -233,8 +240,6 @@ void main_execution(int p, int pid, int n, double sim_start, std::string &ckt_ne
         doc.get("Circuit_attributes")->add("Current_sources_(I)", num_current_sources);
 
     int num_my_rows = dae->A->end_row - dae->A->start_row + 1;
-    /*-- RHT -- */ RHT_Produce_Secure(num_my_rows);
-
     int num_my_nnz = dae->A->local_nnz, sum_nnz = dae->A->local_nnz;
     int min_nnz = num_my_nnz, max_nnz = num_my_nnz;
     int min_rows = num_my_rows, max_rows = num_my_rows, sum_rows = num_my_rows;
@@ -464,6 +469,7 @@ void main_execution_replicated(int p, int pid, int n, double sim_start, std::str
                           int num_resistors, int num_capacitors, int argc, char* argv[]) {
 
     YAML_Doc doc("miniXyce", "1.0");
+    double tempVar;
 
     tstart = mX_timer();
     get_parms(argc, argv, ckt_netlist_filename, t_start, t_step, t_stop, tol, k, init_cond, init_cond_specified, p, pid);
@@ -483,18 +489,30 @@ void main_execution_replicated(int p, int pid, int n, double sim_start, std::str
     doc.add("Netlist_file", ckt_netlist_filename.c_str());
 
     int total_devices = num_voltage_sources + num_current_sources + num_resistors + num_capacitors + num_inductors;
+    /*-- RHT -- */ RHT_Produce_Volatile(total_devices);
+
     doc.add("Circuit_attributes", "");
     doc.get("Circuit_attributes")->add("Number_of_devices", total_devices);
-    if (num_resistors > 0)
+    if (num_resistors > 0) {
+        /*-- RHT -- */ RHT_Produce_Volatile(num_resistors);
         doc.get("Circuit_attributes")->add("Resistors_(R)", num_resistors);
-    if (num_inductors > 0)
+    }
+    if (num_inductors > 0) {
+        /*-- RHT -- */ RHT_Produce_Volatile(num_inductors);
         doc.get("Circuit_attributes")->add("Inductors_(L)", num_inductors);
-    if (num_capacitors > 0)
+    }
+    if (num_capacitors > 0) {
+        /*-- RHT -- */ RHT_Produce_Volatile(num_capacitors);
         doc.get("Circuit_attributes")->add("Capacitors_(C)", num_capacitors);
-    if (num_voltage_sources > 0)
+    }
+    if (num_voltage_sources > 0) {
+        /*-- RHT -- */ RHT_Produce_Volatile(num_voltage_sources);
         doc.get("Circuit_attributes")->add("Voltage_sources_(V)", num_voltage_sources);
-    if (num_current_sources > 0)
+    }
+    if (num_current_sources > 0) {
+        /*-- RHT -- */ RHT_Produce_Volatile(num_current_sources);
         doc.get("Circuit_attributes")->add("Current_sources_(I)", num_current_sources);
+    }
 
     int num_my_rows = dae->A->end_row - dae->A->start_row + 1;
     /*-- RHT -- */ RHT_Produce_Secure(num_my_rows);
@@ -513,14 +531,32 @@ void main_execution_replicated(int p, int pid, int n, double sim_start, std::str
 #endif
 
     doc.add("Matrix_attributes", "");
+
+    /*-- RHT -- */ RHT_Produce_Volatile(sum_rows);
     doc.get("Matrix_attributes")->add("Global_rows", sum_rows);
+
+    /*-- RHT -- */ RHT_Produce_Volatile(min_rows);
     doc.get("Matrix_attributes")->add("Rows_per_proc_MIN", min_rows);
+
+    /*-- RHT -- */ RHT_Produce_Volatile(max_rows);
     doc.get("Matrix_attributes")->add("Rows_per_proc_MAX", max_rows);
-    doc.get("Matrix_attributes")->add("Rows_per_proc_AVG", (double) sum_rows / p);
+
+    tempVar = (double) sum_rows / p;
+    /*-- RHT -- */ RHT_Produce_Volatile(tempVar);
+    doc.get("Matrix_attributes")->add("Rows_per_proc_AVG", tempVar);
+
+    /*-- RHT -- */ RHT_Produce_Volatile(sum_nnz);
     doc.get("Matrix_attributes")->add("Global_NNZ", sum_nnz);
+
+    /*-- RHT -- */ RHT_Produce_Volatile(min_nnz);
     doc.get("Matrix_attributes")->add("NNZ_per_proc_MIN", min_nnz);
+
+    /*-- RHT -- */ RHT_Produce_Volatile(max_nnz);
     doc.get("Matrix_attributes")->add("NNZ_per_proc_MAX", max_nnz);
-    doc.get("Matrix_attributes")->add("NNZ_per_proc_AVG", (double) sum_nnz / p);
+
+    tempVar = (double) sum_nnz / p;
+    /*-- RHT -- */ RHT_Produce_Volatile(tempVar);
+    doc.get("Matrix_attributes")->add("NNZ_per_proc_AVG", tempVar);
 
     // compute the initial condition if not specified by user
     int start_row = dae->A->start_row;
@@ -536,7 +572,7 @@ void main_execution_replicated(int p, int pid, int n, double sim_start, std::str
         }
 
         /*-- RHT -- */ RHT_Produce_Secure(t_start);
-        /*-- RHT -- */  std::vector<double> init_RHS = evaluate_b_producer(t_start, dae);
+        /*-- RHT -- */ std::vector<double> init_RHS = evaluate_b_producer(t_start, dae);
         /*-- RHT -- */ gmres_producer(dae->A, init_RHS, init_cond_guess, tol, res, k, init_cond, iters, restarts);
 
         doc.add("DCOP Calculation", "");
@@ -626,8 +662,7 @@ void main_execution_replicated(int p, int pid, int n, double sim_start, std::str
             int col_idx = curr->column;
             double value = (curr->value) / t_step;
 
-//            /*-- RHT -- */ distributed_sparse_matrix_add_to_producer(A, row_idx, col_idx, value, n, p);
-            distributed_sparse_matrix_add_to(A, row_idx, col_idx, value, n, p);
+            /*-- RHT -- */ distributed_sparse_matrix_add_to_producer(A, row_idx, col_idx, value, n, p);
 
             curr = curr->next_in_row;
         }
@@ -641,42 +676,33 @@ void main_execution_replicated(int p, int pid, int n, double sim_start, std::str
     double total_gmres_res = 0.0;
     int total_gmres_iters = 0;
     int trans_steps = 0;
-//    /*-- RHT -- */ RHT_Produce_Secure(t);
-//    /*-- RHT -- */ RHT_Produce_Secure(total_gmres_res);
-//    /*-- RHT -- */ RHT_Produce_Secure(total_gmres_iters);
-//    /*-- RHT -- */ RHT_Produce_Secure(trans_steps);
+    /*-- RHT -- */ RHT_Produce_Secure(t);
+    /*-- RHT -- */ RHT_Produce_Secure(total_gmres_res);
+    /*-- RHT -- */ RHT_Produce_Secure(total_gmres_iters);
+    /*-- RHT -- */ RHT_Produce_Secure(trans_steps);
 
     while (t < t_stop) {
         trans_steps++;
 
         // new time point t => new value for b(t)
 
-        ///*-- RHT -- */ std::vector<double> b = evaluate_b_producer(t, dae);
-        std::vector<double> b = evaluate_b(t, dae);
+        /*-- RHT -- */ std::vector<double> b = evaluate_b_producer(t, dae);
 
         // build the linear system Ax = b that needs to be solved at this time point
         // Backward Euler is used at every iteration
 
         std::vector<double> RHS;
-        ///*-- RHT -- */ sparse_matrix_vector_product_producer(B, init_cond, RHS);
-        sparse_matrix_vector_product(B, init_cond, RHS);
+        /*-- RHT -- */ sparse_matrix_vector_product_producer(B, init_cond, RHS);
 
-        //dperez, todo
-//        int i = 0;
-//        replicate_loop_producer(0, num_my_rows, i, i++, RHS[i], RHS[i] = (RHS[i]/t_step) + b[i])
-
-        for (int i = 0; i < num_my_rows; i++) {
-            RHS[i] /= t_step;
-            RHS[i] += b[i];
-        }
+        int i = 0;
+        replicate_loop_producer(0, num_my_rows, i, i++, RHS[i], RHS[i] = (RHS[i]/t_step) + b[i])
 
         // now solve the linear system just built using GMRES(k)
-        ///*-- RHT -- */ gmres_producer(A, RHS, init_cond, tol, res, k, init_cond, iters, restarts);
-        gmres(A, RHS, init_cond, tol, res, k, init_cond, iters, restarts);
+        /*-- RHT -- */ gmres_producer(A, RHS, init_cond, tol, res, k, init_cond, iters, restarts);
         total_gmres_iters += iters;
         total_gmres_res += res;
-//        /*-- RHT -- */ RHT_Produce_Secure(total_gmres_iters);
-//        /*-- RHT -- */ RHT_Produce_Secure(total_gmres_res);
+        /*-- RHT -- */ RHT_Produce_Secure(total_gmres_iters);
+        /*-- RHT -- */ RHT_Produce_Secure(total_gmres_res);
 
         // write the results to file
         double io_tstart = mX_timer();
@@ -745,7 +771,7 @@ void consumer_thread_func(void *args) {
     ConsumerParams *params = (ConsumerParams *) args;
 
     bool init_cond_specified;
-    double tol, res, t_step, t_stop, t_start;
+    double tol, res, t_step, t_stop, t_start, tempVar;
     int n, k, iters, p, pid, restarts;
     int num_internal_nodes, num_voltage_sources, num_inductors;
     int num_current_sources, num_resistors , num_capacitors ;
@@ -779,8 +805,48 @@ void consumer_thread_func(void *args) {
                                        num_current_sources, num_resistors, num_capacitors, num_inductors);
 
     // document circuit and matrix attributes
+    int total_devices = num_voltage_sources + num_current_sources + num_resistors + num_capacitors + num_inductors;
+
+    RHT_Consume_Volatile(total_devices);
+
+    if (num_resistors > 0) {
+        RHT_Consume_Volatile(num_resistors);
+    }
+
+    if (num_inductors > 0) {
+        RHT_Consume_Volatile(num_inductors);
+    }
+
+    if (num_capacitors > 0) {
+        RHT_Consume_Volatile(num_capacitors);
+    }
+
+    if (num_voltage_sources > 0) {
+        RHT_Consume_Volatile(num_voltage_sources);
+    }
+
+    if (num_current_sources > 0) {
+        RHT_Consume_Volatile(num_current_sources);
+    }
+
     int num_my_rows = dae->A->end_row - dae->A->start_row + 1;
     /*-- RHT -- */ RHT_Consume_Check(num_my_rows );
+
+    int num_my_nnz = dae->A->local_nnz, sum_nnz = dae->A->local_nnz;
+    int min_nnz = num_my_nnz, max_nnz = num_my_nnz;
+    int min_rows = num_my_rows, max_rows = num_my_rows, sum_rows = num_my_rows;
+
+    /*-- RHT -- */ RHT_Consume_Volatile(sum_rows);
+    /*-- RHT -- */ RHT_Consume_Volatile(min_rows);
+    /*-- RHT -- */ RHT_Consume_Volatile(max_rows);
+
+    tempVar = (double) sum_rows / p;
+    /*-- RHT -- */ RHT_Consume_Volatile(tempVar);
+    /*-- RHT -- */ RHT_Consume_Volatile(sum_nnz);
+    /*-- RHT -- */ RHT_Consume_Volatile(min_nnz);
+    /*-- RHT -- */ RHT_Consume_Volatile(max_nnz);
+    tempVar = (double) sum_nnz / p;
+    /*-- RHT -- */ RHT_Consume_Volatile(tempVar);
 
     // compute the initial condition if not specified by user
     int start_row = dae->A->start_row;
@@ -818,8 +884,7 @@ void consumer_thread_func(void *args) {
             int col_idx = curr->column;
             double value = (curr->value) / t_step;
 
-//            /*-- RHT -- */ distributed_sparse_matrix_add_to_consumer(A, row_idx, col_idx, value, n, p);
-            distributed_sparse_matrix_add_to(A, row_idx, col_idx, value, n, p);
+            /*-- RHT -- */ distributed_sparse_matrix_add_to_consumer(A, row_idx, col_idx, value, n, p);
 
             curr = curr->next_in_row;
         }
@@ -830,41 +895,33 @@ void consumer_thread_func(void *args) {
     double total_gmres_res = 0.0;
     int total_gmres_iters = 0;
     int trans_steps = 0;
-//    /*-- RHT -- */ RHT_Consume_Check(t);
-//    /*-- RHT -- */ RHT_Consume_Check(total_gmres_res);
-//    /*-- RHT -- */ RHT_Consume_Check(total_gmres_iters);
-//    /*-- RHT -- */ RHT_Consume_Check(trans_steps);
+    /*-- RHT -- */ RHT_Consume_Check(t);
+    /*-- RHT -- */ RHT_Consume_Check(total_gmres_res);
+    /*-- RHT -- */ RHT_Consume_Check(total_gmres_iters);
+    /*-- RHT -- */ RHT_Consume_Check(trans_steps);
 
     while (t < t_stop) {
         trans_steps++;
 
         // new time point t => new value for b(t)
 
-        ///*-- RHT -- */ std::vector<double> b = evaluate_b_consumer(t, dae);
-        std::vector<double> b = evaluate_b(t, dae);
+        /*-- RHT -- */ std::vector<double> b = evaluate_b_consumer(t, dae);
 
         // build the linear system Ax = b that needs to be solved at this time point
         // Backward Euler is used at every iteration
 
         std::vector<double> RHS;
-        ///*-- RHT -- */ sparse_matrix_vector_product_consumer(B, init_cond, RHS);
-        sparse_matrix_vector_product(B, init_cond, RHS);
+        /*-- RHT -- */ sparse_matrix_vector_product_consumer(B, init_cond, RHS);
 
-//        int i = 0;
-//        replicate_loop_consumer(0, num_my_rows, i, i++, RHS[i], RHS[i] = (RHS[i]/t_step) + b[i])
-
-        for (int i = 0; i < num_my_rows; i++) {
-            RHS[i] /= t_step;
-            RHS[i] += b[i];
-        }
+        int i = 0;
+        replicate_loop_consumer(0, num_my_rows, i, i++, RHS[i], RHS[i] = (RHS[i]/t_step) + b[i])
 
         // now solve the linear system just built using GMRES(k)
-        ///*-- RHT -- */ gmres_consumer(A, RHS, init_cond, tol, res, k, init_cond, iters, restarts);
-        gmres(A, RHS, init_cond, tol, res, k, init_cond, iters, restarts);
+        /*-- RHT -- */ gmres_consumer(A, RHS, init_cond, tol, res, k, init_cond, iters, restarts);
         total_gmres_iters += iters;
         total_gmres_res += res;
-//        /*-- RHT -- */ RHT_Consume_Check(total_gmres_iters);
-//        /*-- RHT -- */ RHT_Consume_Check(total_gmres_res);
+        /*-- RHT -- */ RHT_Consume_Check(total_gmres_iters);
+        /*-- RHT -- */ RHT_Consume_Check(total_gmres_res);
 
         // write the results to file
         // increment t
