@@ -372,7 +372,7 @@ void mX_matrix_utils::distributed_sparse_matrix_add_to_consumer(distributed_spar
 
     if ((row_idx >= M->start_row) && (row_idx <= M->end_row)) {
         M->local_nnz++;
-        /*-- RHT -- */ RHT_Produce_Secure(M->local_nnz);
+        /*-- RHT -- */ RHT_Consume_Check(M->local_nnz);
 
         // ok, so the processor that's supposed to store M[row_idx][col_idx] is here
         // navigate through the fellow's threaded list and do the needful
@@ -532,92 +532,85 @@ void mX_matrix_utils::distributed_sparse_matrix_add_to_consumer(distributed_spar
 //////////////////// sparse_matrix_vector_product /////////////////////////
 
 void mX_matrix_utils::sparse_matrix_vector_product(distributed_sparse_matrix* A, std::vector<double> &x, std::vector<double> &y) {
-	// compute the matrix vector product A*x and return it in y
-	// assuming x contains only x[start_row] to x[end_row]
+    // compute the matrix vector product A*x and return it in y
+    // assuming x contains only x[start_row] to x[end_row]
 
-	// at the end of this function, it is guaranteed that
-	// y[0] to y[end_row-start_row] will contain the correct entries of (Ax)[start_row] to (Ax)[end_row]
+    // at the end of this function, it is guaranteed that
+    // y[0] to y[end_row-start_row] will contain the correct entries of (Ax)[start_row] to (Ax)[end_row]
 
-	int start_row = A->start_row;
-	int end_row = A->end_row;
+    int start_row = A->start_row;
+    int end_row = A->end_row;
 
 #ifdef HAVE_MPI
     // ok, now's the time to follow the send instructions that each pid has been maintaining
 
-    std::list<data_transfer_instruction*>::iterator it1;
+    std::list<data_transfer_instruction *>::iterator it1;
 
-    for (it1 = A->send_instructions.begin(); it1 != A->send_instructions.end(); it1++)
-    {
+    for (it1 = A->send_instructions.begin(); it1 != A->send_instructions.end(); it1++) {
         std::list<int>::iterator it2;
 
-        for (it2 = (*it1)->indices.begin(); it2 != (*it1)->indices.end(); it2++)
-        {
-            MPI_Send(&x[(*it2)-start_row],1,MPI_DOUBLE,(*it1)->pid,*it2,MPI_COMM_WORLD);
+        for (it2 = (*it1)->indices.begin(); it2 != (*it1)->indices.end(); it2++) {
+            MPI_Send(&x[(*it2) - start_row], 1, MPI_DOUBLE, (*it1)->pid, *it2, MPI_COMM_WORLD);
         }
     }
 #endif
 
-	// and everytime a processor receives an x_vec entry
-	// it stores the entry in a temporary map
+    // and everytime a processor receives an x_vec entry
+    // it stores the entry in a temporary map
 
-	std::map<int, double> x_vec_entries;
-	std::map<int, double>::iterator it3;
+    std::map<int, double> x_vec_entries;
+    std::map<int, double>::iterator it3;
 
-	for (int i = start_row; i <= end_row; i++) {
-		// compute the mat_vec product for the i'th row
+    for (int i = start_row; i <= end_row; i++) {
+        // compute the mat_vec product for the i'th row
 
-		if (y.size() > i - start_row) {
-			y[i - start_row] = (double) (0);
-		} else {
-			y.push_back((double) (0));
-		}
+        if (y.size() > i - start_row) {
+            y[i - start_row] = (double) (0);
+        } else {
+            y.push_back((double) (0));
+        }
 
-		distributed_sparse_matrix_entry *curr = A->row_headers[i - start_row];
+        distributed_sparse_matrix_entry *curr = A->row_headers[i - start_row];
 
-		while (curr) {
-			int col_idx = curr->column;
+        while (curr) {
+            int col_idx = curr->column;
 
-			if ((col_idx >= start_row) && (col_idx <= end_row)) {
-				// aha, this processor has the correct x_vec entry locally
+            if ((col_idx >= start_row) && (col_idx <= end_row)) {
+                // aha, this processor has the correct x_vec entry locally
 
-				y[i - start_row] += (curr->value) * x[col_idx - start_row];
-			}
+                y[i - start_row] += (curr->value) * x[col_idx - start_row];
+            }
 
 #ifdef HAVE_MPI
-            else
-            {
+            else {
                 // this processor does not have the x_vec entry locally
-                    // but some other processor might have sent it to this guy
-                        // in which case the entry would have been stored in the local x_vec_entries map
-                        // so check if the entry is in the map
+                // but some other processor might have sent it to this guy
+                // in which case the entry would have been stored in the local x_vec_entries map
+                // so check if the entry is in the map
 
                 it3 = x_vec_entries.find(col_idx);
 
-                if (it3 != x_vec_entries.end())
-                {
-                    y[i-start_row] += (double)(it3->second)*(curr->value);
-                }
-
-                else
-                {
+                if (it3 != x_vec_entries.end()) {
+                    y[i - start_row] += (double) (it3->second) * (curr->value);
+                } else {
                     // no, the entry is not in the map either
-                        // so this processor waits until someone sends the entry
-                        // and once it gets the entry, it does two things
-                            // puts the entry in the map for future reference
-                            // continues with the matrix vector multiplication
+                    // so this processor waits until someone sends the entry
+                    // and once it gets the entry, it does two things
+                    // puts the entry in the map for future reference
+                    // continues with the matrix vector multiplication
 
                     double x_vec_entry;
-                                MPI_Status status;
-                    MPI_Recv(&x_vec_entry,1,MPI_DOUBLE,MPI_ANY_SOURCE,col_idx,MPI_COMM_WORLD,&status);
+                    MPI_Status status;
+                    MPI_Recv(&x_vec_entry, 1, MPI_DOUBLE, MPI_ANY_SOURCE, col_idx, MPI_COMM_WORLD, &status);
 
                     x_vec_entries[col_idx] = x_vec_entry;
-                    y[i-start_row] += x_vec_entry*(curr->value);
+                    y[i - start_row] += x_vec_entry * (curr->value);
                 }
             }
 #endif
-			curr = curr->next_in_row;
-		}
-	}
+            curr = curr->next_in_row;
+        }
+    }
 }
 
 void mX_matrix_utils::sparse_matrix_vector_product_producer(distributed_sparse_matrix* A, std::vector<double> &x, std::vector<double> &y) {
@@ -632,18 +625,18 @@ void mX_matrix_utils::sparse_matrix_vector_product_producer(distributed_sparse_m
     /*-- RHT -- */ RHT_Produce_Secure(start_row);
     /*-- RHT -- */ RHT_Produce_Secure(end_row);
 
+    printf("Producer: %d, %d\n", start_row, end_row);
+
 #ifdef HAVE_MPI
     // ok, now's the time to follow the send instructions that each pid has been maintaining
 
-    std::list<data_transfer_instruction*>::iterator it1;
+    std::list<data_transfer_instruction *>::iterator it1;
 
-    for (it1 = A->send_instructions.begin(); it1 != A->send_instructions.end(); it1++)
-    {
+    for (it1 = A->send_instructions.begin(); it1 != A->send_instructions.end(); it1++) {
         std::list<int>::iterator it2;
 
-        for (it2 = (*it1)->indices.begin(); it2 != (*it1)->indices.end(); it2++)
-        {
-            MPI_Send(&x[(*it2)-start_row],1,MPI_DOUBLE,(*it1)->pid,*it2,MPI_COMM_WORLD);
+        for (it2 = (*it1)->indices.begin(); it2 != (*it1)->indices.end(); it2++) {
+            MPI_Send(&x[(*it2) - start_row], 1, MPI_DOUBLE, (*it1)->pid, *it2, MPI_COMM_WORLD);
         }
     }
 #endif
@@ -673,8 +666,7 @@ void mX_matrix_utils::sparse_matrix_vector_product_producer(distributed_sparse_m
                 y[i - start_row] += (curr->value) * x[col_idx - start_row];
             }
 #ifdef HAVE_MPI
-            else
-            {
+            else {
                 // this processor does not have the x_vec entry locally
                 // but some other processor might have sent it to this guy
                 // in which case the entry would have been stored in the local x_vec_entries map
@@ -682,12 +674,9 @@ void mX_matrix_utils::sparse_matrix_vector_product_producer(distributed_sparse_m
 
                 it3 = x_vec_entries.find(col_idx);
 
-                if (it3 != x_vec_entries.end())
-                {
-                    y[i-start_row] += (double)(it3->second)*(curr->value);
-                }
-                else
-                {
+                if (it3 != x_vec_entries.end()) {
+                    y[i - start_row] += (double) (it3->second) * (curr->value);
+                } else {
                     // no, the entry is not in the map either
                     // so this processor waits until someone sends the entry
                     // and once it gets the entry, it does two things
@@ -696,14 +685,14 @@ void mX_matrix_utils::sparse_matrix_vector_product_producer(distributed_sparse_m
 
                     double x_vec_entry;
                     MPI_Status status;
-                    MPI_Recv(&x_vec_entry,1,MPI_DOUBLE,MPI_ANY_SOURCE,col_idx,MPI_COMM_WORLD,&status);
+                    MPI_Recv(&x_vec_entry, 1, MPI_DOUBLE, MPI_ANY_SOURCE, col_idx, MPI_COMM_WORLD, &status);
 
                     x_vec_entries[col_idx] = x_vec_entry;
-                    y[i-start_row] += x_vec_entry*(curr->value);
+                    y[i - start_row] += x_vec_entry * (curr->value);
                 }
             }
 #endif
-            /*-- RHT -- */ RHT_Produce_Secure(y[i-start_row]);
+            /*-- RHT -- */ RHT_Produce_Secure(y[i - start_row]);
             curr = curr->next_in_row;
         }
     }
@@ -721,18 +710,18 @@ void mX_matrix_utils::sparse_matrix_vector_product_consumer(distributed_sparse_m
     /*-- RHT -- */ RHT_Consume_Check(start_row);
     /*-- RHT -- */ RHT_Consume_Check(end_row);
 
+    printf("Consumer: %d, %d\n", start_row, end_row);
+
 #ifdef HAVE_MPI
     // ok, now's the time to follow the send instructions that each pid has been maintaining
 
-    std::list<data_transfer_instruction*>::iterator it1;
+    std::list<data_transfer_instruction *>::iterator it1;
 
-    for (it1 = A->send_instructions.begin(); it1 != A->send_instructions.end(); it1++)
-    {
+    for (it1 = A->send_instructions.begin(); it1 != A->send_instructions.end(); it1++) {
         std::list<int>::iterator it2;
 
-        for (it2 = (*it1)->indices.begin(); it2 != (*it1)->indices.end(); it2++)
-        {
-            MPI_Send(&x[(*it2)-start_row],1,MPI_DOUBLE,(*it1)->pid,*it2,MPI_COMM_WORLD);
+        for (it2 = (*it1)->indices.begin(); it2 != (*it1)->indices.end(); it2++) {
+            MPI_Send(&x[(*it2) - start_row], 1, MPI_DOUBLE, (*it1)->pid, *it2, MPI_COMM_WORLD);
         }
     }
 #endif
@@ -762,8 +751,7 @@ void mX_matrix_utils::sparse_matrix_vector_product_consumer(distributed_sparse_m
                 y[i - start_row] += (curr->value) * x[col_idx - start_row];
             }
 #ifdef HAVE_MPI
-            else
-            {
+            else {
                 // this processor does not have the x_vec entry locally
                 // but some other processor might have sent it to this guy
                 // in which case the entry would have been stored in the local x_vec_entries map
@@ -771,12 +759,9 @@ void mX_matrix_utils::sparse_matrix_vector_product_consumer(distributed_sparse_m
 
                 it3 = x_vec_entries.find(col_idx);
 
-                if (it3 != x_vec_entries.end())
-                {
-                    y[i-start_row] += (double)(it3->second)*(curr->value);
-                }
-                else
-                {
+                if (it3 != x_vec_entries.end()) {
+                    y[i - start_row] += (double) (it3->second) * (curr->value);
+                } else {
                     // no, the entry is not in the map either
                     // so this processor waits until someone sends the entry
                     // and once it gets the entry, it does two things
@@ -785,14 +770,14 @@ void mX_matrix_utils::sparse_matrix_vector_product_consumer(distributed_sparse_m
 
                     double x_vec_entry;
                     MPI_Status status;
-                    MPI_Recv(&x_vec_entry,1,MPI_DOUBLE,MPI_ANY_SOURCE,col_idx,MPI_COMM_WORLD,&status);
+                    MPI_Recv(&x_vec_entry, 1, MPI_DOUBLE, MPI_ANY_SOURCE, col_idx, MPI_COMM_WORLD, &status);
 
                     x_vec_entries[col_idx] = x_vec_entry;
-                    y[i-start_row] += x_vec_entry*(curr->value);
+                    y[i - start_row] += x_vec_entry * (curr->value);
                 }
             }
 #endif
-            /*-- RHT -- */ RHT_Consume_Check(y[i-start_row]);
+            /*-- RHT -- */ RHT_Consume_Check(y[i - start_row]);
             curr = curr->next_in_row;
         }
     }
@@ -1297,8 +1282,8 @@ void mX_matrix_utils::gmres_consumer(distributed_sparse_matrix* A, std::vector<d
     double tempVar;
     int start_row = A->start_row;
     int end_row = A->end_row;
-//    /*-- RHT -- */ RHT_Consume_Check(start_row);
-//    /*-- RHT -- */ RHT_Consume_Check(end_row);
+    /*-- RHT -- */ RHT_Consume_Check(start_row);
+    /*-- RHT -- */ RHT_Consume_Check(end_row);
 
     x = x0;
     std::vector<double> temp1;
@@ -1315,6 +1300,7 @@ void mX_matrix_utils::gmres_consumer(distributed_sparse_matrix* A, std::vector<d
     /*-- RHT -- */ RHT_Consume_Check(restarts);
     /*-- RHT -- */ RHT_Consume_Check(iters);
 
+    return;
     while (err > tol) {
         // at the start of every re-start
         // the initial guess is already stored in x

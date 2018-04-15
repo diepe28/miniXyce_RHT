@@ -496,18 +496,18 @@ void main_execution_replicated(int p, int pid, int n, double sim_start, YAML_Doc
 
 
 #ifdef HAVE_MPI
-//    MPI_Allreduce(&num_my_nnz, &sum_nnz, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-//    MPI_Allreduce(&num_my_nnz, &min_nnz, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD);
-//    MPI_Allreduce(&num_my_nnz, &max_nnz, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
-//    MPI_Allreduce(&num_my_rows, &sum_rows, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-//    MPI_Allreduce(&num_my_rows, &min_rows, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD);
-//    MPI_Allreduce(&num_my_rows, &max_rows, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
-//    /*-- RHT -- */ RHT_Produce_Secure(sum_nnz);
-//    /*-- RHT -- */ RHT_Produce_Secure(min_nnz);
-//    /*-- RHT -- */ RHT_Produce_Secure(max_nnz);
-//    /*-- RHT -- */ RHT_Produce_Secure(sum_rows);
-//    /*-- RHT -- */ RHT_Produce_Secure(min_rows);
-//    /*-- RHT -- */ RHT_Produce_Secure(max_rows);
+    MPI_Allreduce(&num_my_nnz, &sum_nnz, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(&num_my_nnz, &min_nnz, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD);
+    MPI_Allreduce(&num_my_nnz, &max_nnz, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
+    MPI_Allreduce(&num_my_rows, &sum_rows, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(&num_my_rows, &min_rows, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD);
+    MPI_Allreduce(&num_my_rows, &max_rows, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
+    /*-- RHT -- */ RHT_Produce_Secure(sum_nnz);
+    /*-- RHT -- */ RHT_Produce_Secure(min_nnz);
+    /*-- RHT -- */ RHT_Produce_Secure(max_nnz);
+    /*-- RHT -- */ RHT_Produce_Secure(sum_rows);
+    /*-- RHT -- */ RHT_Produce_Secure(min_rows);
+    /*-- RHT -- */ RHT_Produce_Secure(max_rows);
 #endif
 
     doc.add("Matrix_attributes", "");
@@ -533,10 +533,8 @@ void main_execution_replicated(int p, int pid, int n, double sim_start, YAML_Doc
         }
 
         /*-- RHT -- */ RHT_Produce_Secure(t_start);
-        ///*-- RHT -- */  std::vector<double> init_RHS = evaluate_b_producer(t_start, dae);
-        ///*-- RHT -- */ gmres_producer(dae->A, init_RHS, init_cond_guess, tol, res, k, init_cond, iters, restarts);
-        std::vector<double> init_RHS = evaluate_b(t_start, dae);
-        gmres(dae->A, init_RHS, init_cond_guess, tol, res, k, init_cond, iters, restarts);
+        /*-- RHT -- */  std::vector<double> init_RHS = evaluate_b_producer(t_start, dae);
+        /*-- RHT -- */ gmres_producer(dae->A, init_RHS, init_cond_guess, tol, res, k, init_cond, iters, restarts);
 
         doc.add("DCOP Calculation", "");
         doc.get("DCOP Calculation")->add("Init_cond_specified", false);
@@ -625,8 +623,7 @@ void main_execution_replicated(int p, int pid, int n, double sim_start, YAML_Doc
             int col_idx = curr->column;
             double value = (curr->value) / t_step;
 
-            ///*-- RHT -- */ distributed_sparse_matrix_add_to_producer(A, row_idx, col_idx, value, n, p);
-            distributed_sparse_matrix_add_to(A, row_idx, col_idx, value, n, p);
+            /*-- RHT -- */ distributed_sparse_matrix_add_to_producer(A, row_idx, col_idx, value, n, p);
 
             curr = curr->next_in_row;
         }
@@ -783,12 +780,12 @@ void consumer_thread_func(void *args) {
     int min_rows = num_my_rows, max_rows = num_my_rows, sum_rows = num_my_rows;
 
 #ifdef HAVE_MPI
-//    /*-- RHT -- */ sum_nnz = (int) RHT_Consume();
-//    /*-- RHT -- */ min_nnz = (int) RHT_Consume();
-//    /*-- RHT -- */ max_nnz = (int) RHT_Consume();
-//    /*-- RHT -- */ sum_rows = (int) RHT_Consume();
-//    /*-- RHT -- */ min_rows = (int) RHT_Consume();
-//    /*-- RHT -- */ max_rows = (int) RHT_Consume();
+    /*-- RHT -- */ sum_nnz = (int) RHT_Consume();
+    /*-- RHT -- */ min_nnz = (int) RHT_Consume();
+    /*-- RHT -- */ max_nnz = (int) RHT_Consume();
+    /*-- RHT -- */ sum_rows = (int) RHT_Consume();
+    /*-- RHT -- */ min_rows = (int) RHT_Consume();
+    /*-- RHT -- */ max_rows = (int) RHT_Consume();
 #endif
 
     // compute the initial condition if not specified by user
@@ -803,11 +800,8 @@ void consumer_thread_func(void *args) {
         }
 
         /*-- RHT -- */ t_start = RHT_Consume();
-        ///*-- RHT -- */ std::vector<double> init_RHS = evaluate_b_consumer(t_start, dae);
-        ///*-- RHT -- */ gmres_consumer(dae->A, init_RHS, init_cond_guess, tol, res, k, init_cond, iters, restarts);
-
-        std::vector<double> init_RHS = evaluate_b(t_start, dae);
-        gmres(dae->A, init_RHS, init_cond_guess, tol, res, k, init_cond, iters, restarts);
+        /*-- RHT -- */ std::vector<double> init_RHS = evaluate_b_consumer(t_start, dae);
+        /*-- RHT -- */ gmres_consumer(dae->A, init_RHS, init_cond_guess, tol, res, k, init_cond, iters, restarts);
     }
 
     // from now you won't be needing any more Ax = b solves
@@ -829,8 +823,7 @@ void consumer_thread_func(void *args) {
             int col_idx = curr->column;
             double value = (curr->value) / t_step;
 
-            distributed_sparse_matrix_add_to(A, row_idx, col_idx, value, n, p);
-            ///*-- RHT -- */ distributed_sparse_matrix_add_to_consumer(A, row_idx, col_idx, value, n, p);
+            /*-- RHT -- */ distributed_sparse_matrix_add_to_consumer(A, row_idx, col_idx, value, n, p);
 
             curr = curr->next_in_row;
         }
