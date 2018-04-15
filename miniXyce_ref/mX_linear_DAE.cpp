@@ -62,7 +62,7 @@ std::vector<double> mX_linear_DAE_utils::evaluate_b(double t, mX_linear_DAE* dae
     return result;
 }
 
-//to do
+//dperez, todo
 std::vector<double> mX_linear_DAE_utils::evaluate_b_producer(double t, mX_linear_DAE* dae) {
     // given a linear DAE "A x + B x_dot = b(t)"
     // and a particular time point t
@@ -89,7 +89,7 @@ std::vector<double> mX_linear_DAE_utils::evaluate_b_producer(double t, mX_linear
     return result;
 }
 
-//to do
+//dperez, todo
 std::vector<double> mX_linear_DAE_utils::evaluate_b_consumer(double t, mX_linear_DAE* dae) {
     // given a linear DAE "A x + B x_dot = b(t)"
     // and a particular time point t

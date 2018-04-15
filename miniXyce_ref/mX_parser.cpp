@@ -36,6 +36,7 @@
 #include "mX_sparse_matrix.h"
 #include <fstream>
 #include <unistd.h>
+#include <cstring>
 #include "mX_parser.h"
 
 #ifdef HAVE_MPI

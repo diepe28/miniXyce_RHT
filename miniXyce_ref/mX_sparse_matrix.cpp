@@ -1059,7 +1059,7 @@ void mX_matrix_utils::gmres_producer(distributed_sparse_matrix* A, std::vector<d
     x = x0;
 
     std::vector<double> temp1;
-    sparse_matrix_vector_product(A, x, temp1);
+    sparse_matrix_vector_product_producer(A, x, temp1);
 
     int i = 0;
     replicate_loop_producer(0, temp1.size(), i, i++, temp1[i], temp1[i] -= b[i])
@@ -1080,7 +1080,7 @@ void mX_matrix_utils::gmres_producer(distributed_sparse_matrix* A, std::vector<d
 
         std::vector<double> temp1;
         std::vector<std::vector<double> > V;
-        sparse_matrix_vector_product(A, x, temp1);
+        sparse_matrix_vector_product_producer(A, x, temp1);
 
         int i = start_row;
 //        for (; i <= end_row; i++) {
@@ -1136,7 +1136,7 @@ void mX_matrix_utils::gmres_producer(distributed_sparse_matrix* A, std::vector<d
             for (int i = start_row; i <= end_row; i++) {
                 temp1.push_back(V[i - start_row][iters - 1]);
             }
-            sparse_matrix_vector_product(A, temp1, temp2);
+            sparse_matrix_vector_product_producer(A, temp1, temp2);
 
             // Right, Mr.GMRES now has the matrix vector product
             // now he will orthogonalize this vector with the previous ones
@@ -1285,7 +1285,9 @@ void mX_matrix_utils::gmres_producer(distributed_sparse_matrix* A, std::vector<d
     }
 }
 
-void mX_matrix_utils::gmres_consumer(distributed_sparse_matrix* A, std::vector<double> &b, std::vector<double> &x0, double &tol, double &err, int k, std::vector<double> &x, int &iters, int &restarts) {
+void mX_matrix_utils::gmres_consumer(distributed_sparse_matrix* A, std::vector<double> &b,
+                                     std::vector<double> &x0, double &tol, double &err, int k, std::vector<double> &x,
+                                     int &iters, int &restarts) {
     // here's the star of the show, the guest of honor, none other than Mr.GMRES
 
     // first Mr.GMRES will compute the error in the initial guess
@@ -1295,13 +1297,12 @@ void mX_matrix_utils::gmres_consumer(distributed_sparse_matrix* A, std::vector<d
     double tempVar;
     int start_row = A->start_row;
     int end_row = A->end_row;
-    /*-- RHT -- */ RHT_Consume_Check(start_row);
-    /*-- RHT -- */ RHT_Consume_Check(end_row);
+//    /*-- RHT -- */ RHT_Consume_Check(start_row);
+//    /*-- RHT -- */ RHT_Consume_Check(end_row);
 
     x = x0;
-
     std::vector<double> temp1;
-    sparse_matrix_vector_product(A, x, temp1);
+    sparse_matrix_vector_product_consumer(A, x, temp1);
 
     int i = 0;
     replicate_loop_consumer(0, temp1.size(), i, i++, temp1[i], temp1[i] -= b[i])
@@ -1322,7 +1323,7 @@ void mX_matrix_utils::gmres_consumer(distributed_sparse_matrix* A, std::vector<d
 
         std::vector<double> temp1;
         std::vector<std::vector<double> > V;
-        sparse_matrix_vector_product(A, x, temp1);
+        sparse_matrix_vector_product_consumer(A, x, temp1);
 
         int i = start_row;
 //        for (; i <= end_row; i++) {
@@ -1378,7 +1379,7 @@ void mX_matrix_utils::gmres_consumer(distributed_sparse_matrix* A, std::vector<d
             for (int i = start_row; i <= end_row; i++) {
                 temp1.push_back(V[i - start_row][iters - 1]);
             }
-            sparse_matrix_vector_product(A, temp1, temp2);
+            sparse_matrix_vector_product_consumer(A, temp1, temp2);
 
             // Right, Mr.GMRES now has the matrix vector product
             // now he will orthogonalize this vector with the previous ones
