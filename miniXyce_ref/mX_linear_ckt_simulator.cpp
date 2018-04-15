@@ -536,10 +536,8 @@ void main_execution_replicated(int p, int pid, int n, double sim_start, std::str
         }
 
         /*-- RHT -- */ RHT_Produce_Secure(t_start);
-//        /*-- RHT -- */  std::vector<double> init_RHS = evaluate_b_producer(t_start, dae);
-//        /*-- RHT -- */ gmres_producer(dae->A, init_RHS, init_cond_guess, tol, res, k, init_cond, iters, restarts);
-        std::vector<double> init_RHS = evaluate_b(t_start, dae);
-        gmres(dae->A, init_RHS, init_cond_guess, tol, res, k, init_cond, iters, restarts);
+        /*-- RHT -- */  std::vector<double> init_RHS = evaluate_b_producer(t_start, dae);
+        /*-- RHT -- */ gmres_producer(dae->A, init_RHS, init_cond_guess, tol, res, k, init_cond, iters, restarts);
 
         doc.add("DCOP Calculation", "");
         doc.get("DCOP Calculation")->add("Init_cond_specified", false);
@@ -797,11 +795,8 @@ void consumer_thread_func(void *args) {
         }
 
         /*-- RHT -- */ t_start = RHT_Consume();
-//        /*-- RHT -- */ std::vector<double> init_RHS = evaluate_b_consumer(t_start, dae);
-//        /*-- RHT -- */ gmres_consumer(dae->A, init_RHS, init_cond_guess, tol, res, k, init_cond, iters, restarts);
-
-        std::vector<double> init_RHS = evaluate_b(t_start, dae);
-        gmres(dae->A, init_RHS, init_cond_guess, tol, res, k, init_cond, iters, restarts);
+        /*-- RHT -- */ std::vector<double> init_RHS = evaluate_b_consumer(t_start, dae);
+        /*-- RHT -- */ gmres_consumer(dae->A, init_RHS, init_cond_guess, tol, res, k, init_cond, iters, restarts);
     }
 
     // from now you won't be needing any more Ax = b solves

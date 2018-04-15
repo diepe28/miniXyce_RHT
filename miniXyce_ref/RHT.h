@@ -29,7 +29,7 @@
 #define INLINE inline __attribute__((always_inline))
 #define EPSILON 0.000001
 #define fequal(a,b) (fabs(a-b) < EPSILON)
-#define TEST_NUM_RUNS 10000
+#define TEST_NUM_RUNS 1000
 
 typedef struct {
     volatile int deqPtr;

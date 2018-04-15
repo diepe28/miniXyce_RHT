@@ -1043,7 +1043,6 @@ void mX_matrix_utils::gmres_producer(distributed_sparse_matrix* A, std::vector<d
     int end_row = A->end_row;
     /*-- RHT -- */ RHT_Produce_Secure(start_row);
     /*-- RHT -- */ RHT_Produce_Secure(end_row);
-    printf("Producer all good here\n");
     x = x0;
 
     std::vector<double> temp1;
@@ -1121,7 +1120,7 @@ void mX_matrix_utils::gmres_producer(distributed_sparse_matrix* A, std::vector<d
 
         while ((err > tol) && (iters < k)) {
             iters++;
-            /*-- RHT -- */ RHT_Produce_Secure(iters);
+            /*-- RHT -- */ RHT_Produce_Volatile(iters);
 
             // Mr.GMRES is now going to update the V matrix
             // for which he will require a matrix vector multiplication
@@ -1157,8 +1156,8 @@ void mX_matrix_utils::gmres_producer(distributed_sparse_matrix* A, std::vector<d
                 MPI_Allreduce(&local_dot,&global_dot,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
 #else
                 global_dot = local_dot;
-                /*-- RHT -- */ RHT_Produce_Secure(global_dot);
 #endif
+                /*-- RHT -- */ RHT_Produce_Secure(global_dot);
                 j = start_row;
 //                replicate_loop_producer(start_row, end_row+1, j, j++,
 //                                        temp2[j - start_row],
@@ -1169,6 +1168,7 @@ void mX_matrix_utils::gmres_producer(distributed_sparse_matrix* A, std::vector<d
 
                 new_col_H.push_back(global_dot);
             }
+
 
             double normTemp2 = norm(temp2);
             /*-- RHT -- */ RHT_Produce_Secure(normTemp2);
@@ -1308,7 +1308,6 @@ void mX_matrix_utils::gmres_consumer(distributed_sparse_matrix* A, std::vector<d
     /*-- RHT -- */ RHT_Consume_Check(start_row);
     /*-- RHT -- */ RHT_Consume_Check(end_row);
 
-    printf("Consumer all good here\n");
     x = x0;
     std::vector<double> temp1;
 //    /*-- RHT -- */ sparse_matrix_vector_product_consumer(A, x, temp1);
@@ -1385,7 +1384,7 @@ void mX_matrix_utils::gmres_consumer(distributed_sparse_matrix* A, std::vector<d
 
         while ((err > tol) && (iters < k)) {
             iters++;
-            /*-- RHT -- */ RHT_Consume_Check(iters);
+            /*-- RHT -- */ RHT_Consume_Volatile(iters);
 
             // Mr.GMRES is now going to update the V matrix
             // for which he will require a matrix vector multiplication
@@ -1421,8 +1420,8 @@ void mX_matrix_utils::gmres_consumer(distributed_sparse_matrix* A, std::vector<d
                 MPI_Allreduce(&local_dot,&global_dot,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
 #else
                 global_dot = local_dot;
-                /*-- RHT -- */ RHT_Produce_Secure(global_dot);
 #endif
+                /*-- RHT -- */ RHT_Consume_Check(global_dot);
                 j = start_row;
 //                replicate_loop_consumer(start_row, end_row+1, j, j++,
 //                                        temp2[j - start_row],
