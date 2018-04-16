@@ -74,13 +74,16 @@ void main_execution(int p, int pid, int n, int argc, char* argv[]);
 
 int main(int argc, char* argv[]) {
     // this is of course, the actual transient simulator
-    int p = 1, pid = 0, n = 0, replicated;
-    int producerCore = 3, consumerCore = 1, numThreads = 2;
+    int p = 1, pid = 0, n = 0, replicated = 0;
+    int producerCore = 0, consumerCore = 2, numThreads = 2;
 
-    //dperez, example of execution: -c tests/cir1.net 1
-    if(argc == 4) {
-        replicated = atoi(argv[3]) == 1 ? 1 : 0;
-        argc--;
+    //dperez, example of execution: -c tests/cir1.net 2 0 1
+    if(argc == 6) {
+        replicated = 1;
+        numThreads = atoi(argv[3]);
+        producerCore = atoi(argv[4]);
+        consumerCore = atoi(argv[5]);
+        argc -= 3;
     }
 
 #ifdef HAVE_MPI

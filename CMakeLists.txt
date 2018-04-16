@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.8)
 project(miniXyceRHT)
 
-#set(CMAKE_BUILD_TYPE Release) # optimizations, but debuging is not allowed
-set(CMAKE_BUILD_TYPE Debug) # NO optimizations, debuging allowed
+set(CMAKE_BUILD_TYPE Release) # optimizations, but debuging is not allowed
+#set(CMAKE_BUILD_TYPE Debug) # NO optimizations, debuging allowed
 
 #set(CMAKE_VERBOSE_MAKEFILE ON)
 
@@ -15,10 +15,14 @@ set(CMAKE_CXX_STANDARD 11)
 
 #-ftree-vectorize
 
-#-DUSING_MPI=1
-#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -funroll-all-loops") #just for gcc
-
+# mpi or not
 #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHAVE_MPI -DMPICH_IGNORE_CXX_SEEK")
+
+# fast math or not
+# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffast-math")
+
+
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -funroll-all-loops") #just for gcc
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DMINIXYCE_INFO=1 -DPRINT_OUTPUT=0")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DAPPROACH_USING_POINTERS=0")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DAPPROACH_ALREADY_CONSUMED=0")

@@ -327,7 +327,7 @@ void mX_matrix_utils::distributed_sparse_matrix_add_to_producer(distributed_spar
                 for (it2 = ((*it1)->indices).begin(); it2 != ((*it1)->indices).end(); it2++) {
                     if (*it2 == col_idx) {
                         send_instruction_posted = true;
-                        /*-- RHT -- */ RHT_Produce_Secure(send_instruction_posted);
+                        break;
                     }
                 }
 
@@ -336,8 +336,9 @@ void mX_matrix_utils::distributed_sparse_matrix_add_to_producer(distributed_spar
                     // is this a volatile access?
                     (*it1)->indices.push_back(col_idx);
                     send_instruction_posted = true;
-                    /*-- RHT -- */ RHT_Produce_Secure(send_instruction_posted);
                 }
+
+                /*-- RHT -- */ RHT_Produce_Secure(send_instruction_posted);
             }
         }
 
@@ -418,6 +419,7 @@ void mX_matrix_utils::distributed_sparse_matrix_add_to_consumer(distributed_spar
             entry_ptr_1->column = col_idx;
             entry_ptr_1->value = val;
             entry_ptr_1->next_in_row = curr;
+            // dperez, no need to check for objects, eventually their fields will be used
             /*-- RHT -- */ RHT_Consume_Check(entry_ptr_1->column);
             /*-- RHT -- */ RHT_Consume_Check(entry_ptr_1->value);
 
@@ -459,7 +461,7 @@ void mX_matrix_utils::distributed_sparse_matrix_add_to_consumer(distributed_spar
         /*-- RHT -- */ RHT_Consume_Check(mid_start_row);
         /*-- RHT -- */ RHT_Consume_Check(mid_end_row);
 
-        //maybe we can convert this loop into our scheme
+        //dperez, todo maybe we can convert this loop into our scheme
         while (!pid_found) {
             if (row_idx < mid_start_row) {
                 end_pid = mid_pid - 1;
@@ -498,7 +500,7 @@ void mX_matrix_utils::distributed_sparse_matrix_add_to_consumer(distributed_spar
                 for (it2 = ((*it1)->indices).begin(); it2 != ((*it1)->indices).end(); it2++) {
                     if (*it2 == col_idx) {
                         send_instruction_posted = true;
-                        /*-- RHT -- */ RHT_Consume_Check(send_instruction_posted);
+                        break;
                     }
                 }
 
@@ -507,8 +509,8 @@ void mX_matrix_utils::distributed_sparse_matrix_add_to_consumer(distributed_spar
                     // is this a volatile access?
                     (*it1)->indices.push_back(col_idx);
                     send_instruction_posted = true;
-                    /*-- RHT -- */ RHT_Consume_Check(send_instruction_posted);
                 }
+                /*-- RHT -- */ RHT_Consume_Check(send_instruction_posted);
             }
         }
 
@@ -656,6 +658,7 @@ void mX_matrix_utils::sparse_matrix_vector_product_producer(distributed_sparse_m
 
         distributed_sparse_matrix_entry *curr = A->row_headers[i - start_row];
 
+        //todo, dperez make while faster
         while (curr) {
             int col_idx = curr->column;
 
@@ -1474,7 +1477,7 @@ void mX_matrix_utils::gmres_consumer(distributed_sparse_matrix* A, std::vector<d
     }
 }
 
-//////////////////// Destroy matrix /////////////////////////
+//////////////////// Non replicated methods /////////////////////////
 
 void mX_matrix_utils::destroy_matrix(distributed_sparse_matrix* A) {
 	if (A) {

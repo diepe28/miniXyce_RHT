@@ -15,7 +15,6 @@
 #include <cstdio>
 #include <pthread.h>
 #include <zconf.h>
-#include <cmath>
 #include <math.h>
 
 
@@ -323,6 +322,17 @@ static INLINE double AlreadyConsumed_Consume() {
         return;
 #endif
 
+// compiler option -ffast-math, has a problem with isnan method
+static int are_both_nan(double pValue, double cValue){
+    if(_GLIBCXX_FAST_MATH){
+        // todo, how to check for nan when the optimization is enabled
+        printf("The -ffast-math is enabled and there is a problem checking for NaN values...\n\n\n");
+        exit(1);
+    }
+
+    return isnan(pValue) && isnan(cValue);
+}
+
 static INLINE void AlreadyConsumed_Consume_Check(double currentValue) {
     globalQueue.otherValue = globalQueue.content[globalQueue.deqPtr];
 
@@ -358,7 +368,7 @@ static INLINE void AlreadyConsumed_Consume_Check(double currentValue) {
         }
     }
 
-    if (isnan(currentValue) && isnan(globalQueue.otherValue)){
+    if (are_both_nan(currentValue, globalQueue.otherValue)){
         consumer_move_next()
     }
 
@@ -396,7 +406,7 @@ static INLINE void UsingPointers_Consume_Check(double currentValue) {
 
     if (!fequal(globalQueue.content[globalQueue.deqPtr], currentValue)) {
 
-        if (isnan(globalQueue.content[globalQueue.deqPtr]) && isnan(currentValue)){
+        if (are_both_nan(globalQueue.content[globalQueue.deqPtr], currentValue)){
             globalQueue.deqPtr = (globalQueue.deqPtr + 1) % RHT_QUEUE_SIZE;
             return;
         }
