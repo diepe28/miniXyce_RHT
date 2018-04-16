@@ -45,6 +45,7 @@
 #include "YAML_Element.hpp"
 #include "YAML_Doc.hpp"
 #include "RHT.h"
+#include <time.h>
 
 #ifdef HAVE_MPI
 #include "mpi.h"
@@ -61,39 +62,23 @@ using namespace mX_parms_utils;
 //-D CMAKE_C_COMPILER=/usr/bin/mpicc -D CMAKE_CXX_COMPILER=/usr/bin/mpicxx
 
 typedef struct {
-    bool init_cond_specified;
-    double tol, res, t_step, t_stop;
-    int n, k, iters, p, executionCore, pid;
-    int num_internal_nodes, num_voltage_sources, num_inductors;
-    int num_current_sources, num_resistors , num_capacitors ;
-    std::vector<double> init_cond;
-    std::string ckt_netlist_filename;
-    int argc;
+    int n, p, pid, argc, executionCore;
     char** argv;
 } ConsumerParams;
 
 void consumer_thread_func(void * args);
 
-double main_execution_replicated(int p, int pid, int n, double sim_start, std::string &ckt_netlist_filename,
-                    double t_start, double t_step, double t_stop, double tol, double res, int k, int iters,
-                    int restarts, std::vector<double> &init_cond, bool init_cond_specified, double tstart, double tend,
-                    int num_internal_nodes, int num_voltage_sources, int num_inductors, int num_current_sources,
-                    int num_resistors, int num_capacitors, int argc, char* argv[]);
+double main_execution_replicated(int p, int pid, int n, int argc, char* argv[]);
 
-double main_execution(int p, int pid, int n, double sim_start, std::string &ckt_netlist_filename,
-                    double t_start, double t_step, double t_stop, double tol, double res, int k, int iters,
-                    int restarts, std::vector<double> &init_cond, bool init_cond_specified, double tstart, double tend,
-                    int num_internal_nodes, int num_voltage_sources, int num_inductors, int num_current_sources,
-                    int num_resistors, int num_capacitors, int argc, char* argv[]);
+double main_execution(int p, int pid, int n, int argc, char* argv[]);
 
 int main(int argc, char* argv[]) {
     // this is of course, the actual transient simulator
     int p = 1, pid = 0, n = 0, replicated;
-    int producerCore = 0, consumerCore = 2, numThreads = 2;
+    int producerCore = 3, consumerCore = 1, numThreads = 2;
 
     //dperez, example of execution: -c tests/cir1.net 1
-    if(argc == 4)
-    {
+    if(argc == 4) {
         replicated = atoi(argv[3]) == 1 ? 1 : 0;
         argc--;
     }
@@ -104,31 +89,26 @@ int main(int argc, char* argv[]) {
     MPI_Comm_size(MPI_COMM_WORLD, &p);
     MPI_Comm_rank(MPI_COMM_WORLD, &pid);
 #endif
-    double sim_start = mX_timer();
-
     // initialize the simulation parameters
-    std::string ckt_netlist_filename;
-    double t_start, t_step, t_stop, tol, res;
-    int k, iters, restarts;
-
-    std::vector<double> init_cond;
-    bool init_cond_specified;
-    double tstart, tend;
-    int num_internal_nodes, num_voltage_sources, num_inductors;
-    int num_current_sources = 0, num_resistors = 0, num_capacitors = 0;
     double times = 0;
+    struct timespec start, finish;
+    double elapsed;
 
     if (!replicated) {
         for (int iterator = 0; iterator < TEST_NUM_RUNS; iterator++) {
 
-            times += main_execution(p, pid, n, sim_start, ckt_netlist_filename, t_start, t_step, t_stop, tol, res, k, iters,
-                           restarts, init_cond, init_cond_specified, tstart, tend, num_internal_nodes,
-                           num_voltage_sources,
-                           num_inductors, num_current_sources, num_resistors, num_capacitors, argc, argv);
+            clock_gettime(CLOCK_MONOTONIC, &start);
+            {
+                main_execution(p, pid, n, argc, argv);
+            }
+            clock_gettime(CLOCK_MONOTONIC, &finish);
 
-            // params that need to be reset each time
-            init_cond.clear();
-            num_current_sources = num_resistors = num_capacitors = 0;
+            elapsed = (finish.tv_sec - start.tv_sec);
+            elapsed += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
+
+            printf("\nActual Walltime in seconds: %f \n ", elapsed);
+
+            times += elapsed;
 
             printf("\n-----------------\n\n");
         }
@@ -145,30 +125,13 @@ int main(int argc, char* argv[]) {
             RHT_Replication_Init(numThreads);
             consumerParams = new ConsumerParams();
 
-            consumerParams->ckt_netlist_filename = ckt_netlist_filename;
             consumerParams->pid = pid;
-            consumerParams->num_internal_nodes = num_internal_nodes;
-            consumerParams->num_voltage_sources = num_voltage_sources;
-            consumerParams->num_inductors = num_inductors;
-            consumerParams->num_current_sources = num_current_sources;
-            consumerParams->num_resistors = num_resistors;
-            consumerParams->num_capacitors = num_capacitors;
-            consumerParams->executionCore = consumerCore;
-            consumerParams->init_cond_specified = init_cond_specified;
             consumerParams->n = n;
-            consumerParams->tol = tol;
-            consumerParams->res = res;
-            consumerParams->k = k;
-            consumerParams->iters = iters;
             consumerParams->p = p;
-            consumerParams->t_step = t_step;
-            consumerParams->t_stop = t_stop;
+            consumerParams->executionCore = consumerCore;
             consumerParams->argc = argc;
             consumerParams->argv = argv;
 
-            for (int myIt = 0; myIt < init_cond.size(); myIt++) {
-                consumerParams->init_cond[myIt] = init_cond.at(myIt);
-            }
             pthread_t myThread;
 
 //            int err = pthread_create(consumerThreads[0], NULL, (void *(*)(void *)) consumer_thread_func,
@@ -180,19 +143,23 @@ int main(int argc, char* argv[]) {
                 exit(1);
             }
 
-            times += main_execution_replicated(p, pid, n, sim_start, ckt_netlist_filename, t_start, t_step,
-                                      t_stop, tol, res, k, iters, restarts, init_cond, init_cond_specified, tstart,
-                                      tend, num_internal_nodes, num_voltage_sources, num_inductors,
-                                      num_current_sources, num_resistors, num_capacitors, argc, argv);
+            clock_gettime(CLOCK_MONOTONIC, &start);
+            {
+                main_execution_replicated(p, pid, n, argc, argv);
+                pthread_join(myThread, NULL);
+            }
+            clock_gettime(CLOCK_MONOTONIC, &finish);
 
-            //pthread_join(*consumerThreads[0], NULL);
-            pthread_join(myThread, NULL);
+            elapsed = (finish.tv_sec - start.tv_sec);
+            elapsed += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
+
+            printf("\nActual Walltime in seconds: %f \n ", elapsed);
+
+            times += elapsed;
 
             // params that need to be reset each time
             if (consumerParams)
                 delete consumerParams;
-            init_cond.clear();
-            num_current_sources = num_resistors = num_capacitors = 0;
 
             RHT_Replication_Finish();
             printf("\n-----------------\n\n");
@@ -214,11 +181,20 @@ int main(int argc, char* argv[]) {
     return 0;
 }
 
-double main_execution(int p, int pid, int n, double sim_start, std::string &ckt_netlist_filename,
-                    double t_start, double t_step, double t_stop, double tol, double res, int k, int iters,
-                    int restarts, std::vector<double> &init_cond, bool init_cond_specified, double tstart, double tend,
-                    int num_internal_nodes, int num_voltage_sources, int num_inductors, int num_current_sources,
-                    int num_resistors, int num_capacitors, int argc, char* argv[]) {
+double main_execution(int p, int pid, int n, int argc, char* argv[]) {
+
+    double sim_start = mX_timer();
+
+    // initialize the simulation parameters
+    std::string ckt_netlist_filename;
+    double t_start, t_step, t_stop, tol, res;
+    int k, iters, restarts;
+
+    std::vector<double> init_cond;
+    bool init_cond_specified;
+    double tstart, tend;
+    int num_internal_nodes, num_voltage_sources, num_inductors;
+    int num_current_sources = 0, num_resistors = 0, num_capacitors = 0;
 
     // initialize YAML doc
     YAML_Doc doc("miniXyce", "1.0");
@@ -448,7 +424,7 @@ double main_execution(int p, int pid, int n, double sim_start, std::string &ckt_
         t += t_step;
     }
 
-// Hurray, the transient simulation is done!
+    // Hurray, the transient simulation is done!
     if (pid == 0) {
         outfile->close();
         delete outfile;
@@ -481,12 +457,19 @@ double main_execution(int p, int pid, int n, double sim_start, std::string &ckt_
     return sim_end;
 }
 
+double main_execution_replicated(int p, int pid, int n, int argc, char* argv[]) {
+    double sim_start = mX_timer();
 
-double main_execution_replicated(int p, int pid, int n, double sim_start, std::string &ckt_netlist_filename,
-                              double t_start, double t_step, double t_stop, double tol, double res, int k, int iters,
-                          int restarts, std::vector<double> &init_cond, bool init_cond_specified, double tstart, double tend,
-                          int num_internal_nodes, int num_voltage_sources, int num_inductors, int num_current_sources,
-                          int num_resistors, int num_capacitors, int argc, char* argv[]) {
+    // initialize the simulation parameters
+    std::string ckt_netlist_filename;
+    double t_start, t_step, t_stop, tol, res;
+    int k, iters, restarts;
+
+    std::vector<double> init_cond;
+    bool init_cond_specified;
+    double tstart, tend;
+    int num_internal_nodes, num_voltage_sources, num_inductors;
+    int num_current_sources = 0, num_resistors = 0, num_capacitors = 0;
 
     YAML_Doc doc("miniXyce", "1.0");
     double tempVar, tempVar2;
@@ -819,24 +802,9 @@ void consumer_thread_func(void *args) {
 
     SetThreadAffinity(params->executionCore);
 
-    ckt_netlist_filename = params->ckt_netlist_filename;
     pid = params->pid;
-    num_internal_nodes = params->num_internal_nodes;
-    num_voltage_sources = params->num_voltage_sources;
-    num_inductors = params->num_inductors;
-    num_current_sources = params->num_current_sources;
-    num_resistors= params->num_resistors;
-    num_capacitors = params->num_capacitors;
-    init_cond_specified = params->init_cond_specified;
     n = params->n;
-    tol = params->tol;
-    res = params->res;
-    k = params->k;
-    iters = params->iters;
     p = params->p;
-    t_step = params->t_step;
-    t_stop= params->t_stop;
-
 
     get_parms(params->argc, params->argv, ckt_netlist_filename, t_start, t_step, t_stop, tol, k, init_cond, init_cond_specified, p, pid);
     mX_linear_DAE *dae = parse_netlist(ckt_netlist_filename, p, pid, n, num_internal_nodes,

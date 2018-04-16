@@ -29,7 +29,7 @@
 #define INLINE inline __attribute__((always_inline))
 #define EPSILON 0.000001
 #define fequal(a,b) (fabs(a-b) < EPSILON)
-#define TEST_NUM_RUNS 100
+#define TEST_NUM_RUNS 5
 
 typedef struct {
     volatile int deqPtr;
@@ -80,11 +80,11 @@ extern long consumerCount;
                 (RHT_QUEUE_SIZE - globalQueue.enqPtr) + globalQueue.localDeq:   \
                 globalQueue.localDeq - globalQueue.enqPtr)-1;
 
-#define write_move_normal(value)\
+#define write_move_normal(value)                                        \
     globalQueue.content[globalQueue.enqPtr] = value;                    \
     globalQueue.enqPtr = (globalQueue.enqPtr + 1) % RHT_QUEUE_SIZE;
 
-#define write_move_inverted(value)                        \
+#define write_move_inverted(value)                                      \
     globalQueue.nextEnq = (globalQueue.enqPtr + 1) % RHT_QUEUE_SIZE;    \
     globalQueue.content[globalQueue.nextEnq] = ALREADY_CONSUMED;        \
     /*asm volatile("" ::: "memory");*/                                  \
