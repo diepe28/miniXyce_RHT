@@ -74,13 +74,13 @@ typedef struct {
 
 void consumer_thread_func(void * args);
 
-void main_execution_replicated(int p, int pid, int n, double sim_start, std::string &ckt_netlist_filename,
+double main_execution_replicated(int p, int pid, int n, double sim_start, std::string &ckt_netlist_filename,
                     double t_start, double t_step, double t_stop, double tol, double res, int k, int iters,
                     int restarts, std::vector<double> &init_cond, bool init_cond_specified, double tstart, double tend,
                     int num_internal_nodes, int num_voltage_sources, int num_inductors, int num_current_sources,
                     int num_resistors, int num_capacitors, int argc, char* argv[]);
 
-void main_execution(int p, int pid, int n, double sim_start, std::string &ckt_netlist_filename,
+double main_execution(int p, int pid, int n, double sim_start, std::string &ckt_netlist_filename,
                     double t_start, double t_step, double t_stop, double tol, double res, int k, int iters,
                     int restarts, std::vector<double> &init_cond, bool init_cond_specified, double tstart, double tend,
                     int num_internal_nodes, int num_voltage_sources, int num_inductors, int num_current_sources,
@@ -116,11 +116,26 @@ int main(int argc, char* argv[]) {
     double tstart, tend;
     int num_internal_nodes, num_voltage_sources, num_inductors;
     int num_current_sources = 0, num_resistors = 0, num_capacitors = 0;
+    double times = 0;
 
     if (!replicated) {
-        main_execution(p, pid, n, sim_start, ckt_netlist_filename, t_start, t_step, t_stop, tol, res, k, iters,
-                       restarts, init_cond, init_cond_specified, tstart, tend, num_internal_nodes, num_voltage_sources,
-                       num_inductors, num_current_sources, num_resistors, num_capacitors, argc, argv);
+        for (int iterator = 0; iterator < TEST_NUM_RUNS; iterator++) {
+
+            times += main_execution(p, pid, n, sim_start, ckt_netlist_filename, t_start, t_step, t_stop, tol, res, k, iters,
+                           restarts, init_cond, init_cond_specified, tstart, tend, num_internal_nodes,
+                           num_voltage_sources,
+                           num_inductors, num_current_sources, num_resistors, num_capacitors, argc, argv);
+
+            // params that need to be reset each time
+            init_cond.clear();
+            num_current_sources = num_resistors = num_capacitors = 0;
+
+            printf("\n-----------------\n\n");
+        }
+
+        printf("\n -------- Summary Baseline ----------- \n");
+        printf("Mean time in seconds: %f \n\n", times / TEST_NUM_RUNS);
+
     } else {
         SetThreadAffinity(producerCore);
 
@@ -165,7 +180,7 @@ int main(int argc, char* argv[]) {
                 exit(1);
             }
 
-            main_execution_replicated(p, pid, n, sim_start, ckt_netlist_filename, t_start, t_step,
+            times += main_execution_replicated(p, pid, n, sim_start, ckt_netlist_filename, t_start, t_step,
                                       t_stop, tol, res, k, iters, restarts, init_cond, init_cond_specified, tstart,
                                       tend, num_internal_nodes, num_voltage_sources, num_inductors,
                                       num_current_sources, num_resistors, num_capacitors, argc, argv);
@@ -183,6 +198,9 @@ int main(int argc, char* argv[]) {
             printf("\n-----------------\n\n");
         }
 
+        printf("\n -------- Summary Replicated ----------- \n");
+        printf("Mean time in seconds: %f \n\n", times / TEST_NUM_RUNS);
+
 #ifdef HAVE_MPI
         MPI_Finalize();
 #endif
@@ -196,7 +214,7 @@ int main(int argc, char* argv[]) {
     return 0;
 }
 
-void main_execution(int p, int pid, int n, double sim_start, std::string &ckt_netlist_filename,
+double main_execution(int p, int pid, int n, double sim_start, std::string &ckt_netlist_filename,
                     double t_start, double t_step, double t_stop, double tol, double res, int k, int iters,
                     int restarts, std::vector<double> &init_cond, bool init_cond_specified, double tstart, double tend,
                     int num_internal_nodes, int num_voltage_sources, int num_inductors, int num_current_sources,
@@ -459,10 +477,12 @@ void main_execution(int p, int pid, int n, double sim_start, std::string &ckt_ne
 
     // Clean up
     mX_linear_DAE_utils::destroy(dae);
+
+    return sim_end;
 }
 
 
-void main_execution_replicated(int p, int pid, int n, double sim_start, std::string &ckt_netlist_filename,
+double main_execution_replicated(int p, int pid, int n, double sim_start, std::string &ckt_netlist_filename,
                               double t_start, double t_step, double t_stop, double tol, double res, int k, int iters,
                           int restarts, std::vector<double> &init_cond, bool init_cond_specified, double tstart, double tend,
                           int num_internal_nodes, int num_voltage_sources, int num_inductors, int num_current_sources,
@@ -782,6 +802,8 @@ void main_execution_replicated(int p, int pid, int n, double sim_start, std::str
 
     // Clean up
     mX_linear_DAE_utils::destroy(dae);
+
+    return sim_end;
 }
 
 void consumer_thread_func(void *args) {
