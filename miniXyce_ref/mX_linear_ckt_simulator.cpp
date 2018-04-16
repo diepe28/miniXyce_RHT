@@ -469,7 +469,7 @@ void main_execution_replicated(int p, int pid, int n, double sim_start, std::str
                           int num_resistors, int num_capacitors, int argc, char* argv[]) {
 
     YAML_Doc doc("miniXyce", "1.0");
-    double tempVar;
+    double tempVar, tempVar2;
 
     tstart = mX_timer();
     get_parms(argc, argv, ckt_netlist_filename, t_start, t_step, t_stop, tol, k, init_cond, init_cond_specified, p, pid);
@@ -532,31 +532,25 @@ void main_execution_replicated(int p, int pid, int n, double sim_start, std::str
 
     doc.add("Matrix_attributes", "");
 
-    /*-- RHT -- */ RHT_Produce_Volatile(sum_rows);
-    doc.get("Matrix_attributes")->add("Global_rows", sum_rows);
-
-    /*-- RHT -- */ RHT_Produce_Volatile(min_rows);
-    doc.get("Matrix_attributes")->add("Rows_per_proc_MIN", min_rows);
-
-    /*-- RHT -- */ RHT_Produce_Volatile(max_rows);
-    doc.get("Matrix_attributes")->add("Rows_per_proc_MAX", max_rows);
-
+    /*-- RHT -- */ RHT_Produce_Secure(sum_rows);
+    /*-- RHT -- */ RHT_Produce_Secure(min_rows);
+    /*-- RHT -- */ RHT_Produce_Secure(max_rows);
     tempVar = (double) sum_rows / p;
-    /*-- RHT -- */ RHT_Produce_Volatile(tempVar);
+    /*-- RHT -- */ RHT_Produce_Secure(tempVar);
+    /*-- RHT -- */ RHT_Produce_Secure(sum_nnz);
+    /*-- RHT -- */ RHT_Produce_Secure(min_nnz);
+    /*-- RHT -- */ RHT_Produce_Secure(max_nnz);
+    tempVar2 = (double) sum_nnz / p;
+    /*-- RHT -- */ RHT_Produce_Volatile(tempVar2);
+
+    doc.get("Matrix_attributes")->add("Global_rows", sum_rows);
+    doc.get("Matrix_attributes")->add("Rows_per_proc_MIN", min_rows);
+    doc.get("Matrix_attributes")->add("Rows_per_proc_MAX", max_rows);
     doc.get("Matrix_attributes")->add("Rows_per_proc_AVG", tempVar);
-
-    /*-- RHT -- */ RHT_Produce_Volatile(sum_nnz);
     doc.get("Matrix_attributes")->add("Global_NNZ", sum_nnz);
-
-    /*-- RHT -- */ RHT_Produce_Volatile(min_nnz);
     doc.get("Matrix_attributes")->add("NNZ_per_proc_MIN", min_nnz);
-
-    /*-- RHT -- */ RHT_Produce_Volatile(max_nnz);
     doc.get("Matrix_attributes")->add("NNZ_per_proc_MAX", max_nnz);
-
-    tempVar = (double) sum_nnz / p;
-    /*-- RHT -- */ RHT_Produce_Volatile(tempVar);
-    doc.get("Matrix_attributes")->add("NNZ_per_proc_AVG", tempVar);
+    doc.get("Matrix_attributes")->add("NNZ_per_proc_AVG", tempVar2);
 
     // compute the initial condition if not specified by user
     int start_row = dae->A->start_row;
@@ -574,6 +568,12 @@ void main_execution_replicated(int p, int pid, int n, double sim_start, std::str
         /*-- RHT -- */ RHT_Produce_Secure(t_start);
         /*-- RHT -- */ std::vector<double> init_RHS = evaluate_b_producer(t_start, dae);
         /*-- RHT -- */ gmres_producer(dae->A, init_RHS, init_cond_guess, tol, res, k, init_cond, iters, restarts);
+
+        /*-- RHT -- */ RHT_Produce_Secure(tol);
+        /*-- RHT -- */ RHT_Produce_Secure(k);
+        /*-- RHT -- */ RHT_Produce_Secure(iters);
+        /*-- RHT -- */ RHT_Produce_Secure(restarts);
+        /*-- RHT -- */ RHT_Produce_Volatile(res);
 
         doc.add("DCOP Calculation", "");
         doc.get("DCOP Calculation")->add("Init_cond_specified", false);
@@ -597,7 +597,6 @@ void main_execution_replicated(int p, int pid, int n, double sim_start, std::str
     std::string out_filename = ckt_netlist_filename.substr(0, dot_position) + "_tran_results.prn";
     std::ofstream *outfile = 0;
 
-
 #ifdef HAVE_MPI
     // Prepare rcounts and displs for a contiguous gather of the full solution vector.
     std::vector<int> rcounts(p, 0), displs(p, 0);
@@ -616,10 +615,18 @@ void main_execution_replicated(int p, int pid, int n, double sim_start, std::str
 
         for (int i = 0; i < sum_rows; i++) {
             std::stringstream ss2;
-            if (i < num_internal_nodes)
-                ss2 << "V" << i + 1;
-            else
-                ss2 << "I" << i + 1 - num_internal_nodes;
+            if (i < num_internal_nodes) {
+                tempVar = i + 1;
+                ss2 << "V";
+            }
+            else {
+                tempVar = i + 1 - num_internal_nodes;
+                ss2 << "I";
+            }
+
+            /*-- RHT -- */ RHT_Produce_Volatile(tempVar);
+            ss2 << tempVar;
+
             *outfile << std::setw(18) << ss2.str();
         }
 
@@ -661,7 +668,7 @@ void main_execution_replicated(int p, int pid, int n, double sim_start, std::str
         while (curr) {
             int col_idx = curr->column;
             double value = (curr->value) / t_step;
-
+            /*-- RHT -- */ RHT_Produce_Secure(value);
             /*-- RHT -- */ distributed_sparse_matrix_add_to_producer(A, row_idx, col_idx, value, n, p);
 
             curr = curr->next_in_row;
@@ -683,6 +690,7 @@ void main_execution_replicated(int p, int pid, int n, double sim_start, std::str
 
     while (t < t_stop) {
         trans_steps++;
+        /*-- RHT -- */ RHT_Produce_Secure(trans_steps);
 
         // new time point t => new value for b(t)
 
@@ -743,6 +751,15 @@ void main_execution_replicated(int p, int pid, int n, double sim_start, std::str
 
     tend = mX_timer();
     double sim_end = tend - sim_start;
+
+    /*-- RHT -- */ RHT_Produce_Secure(trans_steps);
+    /*-- RHT -- */ RHT_Produce_Secure(tol);
+    /*-- RHT -- */ RHT_Produce_Secure(k);
+    tempVar = total_gmres_iters / trans_steps;
+    /*-- RHT -- */ RHT_Produce_Secure(tempVar);
+    tempVar2 = total_gmres_res / trans_steps;
+    /*-- RHT -- */ RHT_Produce_Volatile(tempVar2);
+
     doc.add("Transient Calculation", "");
     doc.get("Transient Calculation")->add("Number_of_time_steps", trans_steps);
     doc.get("Transient Calculation")->add("Time_start", t_start);
@@ -750,8 +767,8 @@ void main_execution_replicated(int p, int pid, int n, double sim_start, std::str
     doc.get("Transient Calculation")->add("Time_step", t_step);
     doc.get("Transient Calculation")->add("GMRES_tolerance", tol);
     doc.get("Transient Calculation")->add("GMRES_subspace_dim", k);
-    doc.get("Transient Calculation")->add("GMRES_average_iters", total_gmres_iters / trans_steps);
-    doc.get("Transient Calculation")->add("GMRES_average_res", total_gmres_res / trans_steps);
+    doc.get("Transient Calculation")->add("GMRES_average_iters", tempVar);
+    doc.get("Transient Calculation")->add("GMRES_average_res", tempVar2);
     doc.get("Transient Calculation")->add("Matrix_setup_time", matrix_setup_tend);
     doc.get("Transient Calculation")->add("Transient_calculation_time", tend - tstart);
     doc.add("I/O File Time", io_tend);
@@ -836,15 +853,14 @@ void consumer_thread_func(void *args) {
     int min_nnz = num_my_nnz, max_nnz = num_my_nnz;
     int min_rows = num_my_rows, max_rows = num_my_rows, sum_rows = num_my_rows;
 
-    /*-- RHT -- */ RHT_Consume_Volatile(sum_rows);
-    /*-- RHT -- */ RHT_Consume_Volatile(min_rows);
-    /*-- RHT -- */ RHT_Consume_Volatile(max_rows);
-
+    /*-- RHT -- */ RHT_Consume_Check(sum_rows);
+    /*-- RHT -- */ RHT_Consume_Check(min_rows);
+    /*-- RHT -- */ RHT_Consume_Check(max_rows);
     tempVar = (double) sum_rows / p;
-    /*-- RHT -- */ RHT_Consume_Volatile(tempVar);
-    /*-- RHT -- */ RHT_Consume_Volatile(sum_nnz);
-    /*-- RHT -- */ RHT_Consume_Volatile(min_nnz);
-    /*-- RHT -- */ RHT_Consume_Volatile(max_nnz);
+    /*-- RHT -- */ RHT_Consume_Check(tempVar);
+    /*-- RHT -- */ RHT_Consume_Check(sum_nnz);
+    /*-- RHT -- */ RHT_Consume_Check(min_nnz);
+    /*-- RHT -- */ RHT_Consume_Check(max_nnz);
     tempVar = (double) sum_nnz / p;
     /*-- RHT -- */ RHT_Consume_Volatile(tempVar);
 
@@ -863,6 +879,24 @@ void consumer_thread_func(void *args) {
         /*-- RHT -- */ t_start = RHT_Consume();
         /*-- RHT -- */ std::vector<double> init_RHS = evaluate_b_consumer(t_start, dae);
         /*-- RHT -- */ gmres_consumer(dae->A, init_RHS, init_cond_guess, tol, res, k, init_cond, iters, restarts);
+
+        /*-- RHT -- */ RHT_Consume_Check(tol);
+        /*-- RHT -- */ RHT_Consume_Check(k);
+        /*-- RHT -- */ RHT_Consume_Check(iters);
+        /*-- RHT -- */ RHT_Consume_Check(restarts);
+        /*-- RHT -- */ RHT_Consume_Volatile(res);
+    }
+
+    if (pid == 0) {
+        for (int i = 0; i < sum_rows; i++) {
+            if (i < num_internal_nodes) {
+                tempVar = i + 1;
+            }
+            else {
+                tempVar = i + 1 - num_internal_nodes;
+            }
+            /*-- RHT -- */ RHT_Consume_Volatile(tempVar);
+        }
     }
 
     // from now you won't be needing any more Ax = b solves
@@ -883,7 +917,7 @@ void consumer_thread_func(void *args) {
         while (curr) {
             int col_idx = curr->column;
             double value = (curr->value) / t_step;
-
+            /*-- RHT -- */ RHT_Consume_Check(value);
             /*-- RHT -- */ distributed_sparse_matrix_add_to_consumer(A, row_idx, col_idx, value, n, p);
 
             curr = curr->next_in_row;
@@ -902,6 +936,7 @@ void consumer_thread_func(void *args) {
 
     while (t < t_stop) {
         trans_steps++;
+        /*-- RHT -- */ RHT_Consume_Check(trans_steps);
 
         // new time point t => new value for b(t)
 
@@ -930,6 +965,15 @@ void consumer_thread_func(void *args) {
     }
 
     // Hurray, the transient simulation is done!
+
+    /*-- RHT -- */ RHT_Consume_Check(trans_steps);
+    /*-- RHT -- */ RHT_Consume_Check(tol);
+    /*-- RHT -- */ RHT_Consume_Check(k);
+    tempVar = total_gmres_iters / trans_steps;
+    /*-- RHT -- */ RHT_Consume_Check(tempVar);
+    tempVar = total_gmres_res / trans_steps;
+    /*-- RHT -- */ RHT_Consume_Volatile(tempVar);
+
     // Clean up
     mX_linear_DAE_utils::destroy(dae);
 }
