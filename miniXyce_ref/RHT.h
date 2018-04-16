@@ -66,6 +66,16 @@ static int consumerThreadCount;
 extern long producerCount;
 extern long consumerCount;
 
+// compiler option -ffast-math, has a problem with isnan method
+static int are_both_nan(double pValue, double cValue){
+    if(_GLIBCXX_FAST_MATH){
+        // todo, how to check for nan when the optimization is enabled
+        printf("The -ffast-math is enabled and there is a problem checking for NaN values...\n\n\n");
+        exit(1);
+    }
+    return isnan(pValue) && isnan(cValue);
+}
+
 /// ((RHT_QUEUE_SIZE-globalQueue.enqPtr + globalQueue.localDeq) % RHT_QUEUE_SIZE)-1; this would be faster and
 /// with the -1 we make sure that the producer never really catches up to the consumer, but it might still happen
 /// the other way around,
@@ -89,7 +99,7 @@ extern long consumerCount;
     globalQueue.content[globalQueue.nextEnq] = ALREADY_CONSUMED;        \
     /*asm volatile("" ::: "memory");*/                                  \
     globalQueue.content[globalQueue.enqPtr] = value;                    \
-    globalQueue.enqPtr = globalQueue.nextEnq;
+    globalQueue.enqPtr = globalQueue.nextEnq; producerCount++;
 
 #if APPROACH_WRITE_INVERTED_NEW_LIMIT == 1
 #define write_move(value) write_move_inverted(value)
@@ -163,7 +173,7 @@ extern long consumerCount;
         calc_and_move(operation, value)                                 \
     }
 
-// works for either forward or backward loop for
+// works for either forward or backward 'for' loops
 #define replicate_loop_producer_(numIters, iterator, iterOp, value, operation)  \
     wait_for_consumer(globalQueue.diff)                                         \
     while (globalQueue.diff < numIters) {                                       \
@@ -188,10 +198,12 @@ extern long consumerCount;
     }
 #else
 #define replicate_loop_producer(sIndex, fIndex, iterator, iterOp, value, operation) \
-        iterCountProducer = fIndex - sIndex;                                        \
-        replicate_loop_producer_(iterCountProducer, iterator, iterOp, value, operation)
+    iterCountProducer = fIndex - sIndex;                                            \
+    replicate_loop_producer_(iterCountProducer, iterator, iterOp, value, operation)
 #endif
 
+
+#if VAR_GROUPING == 1
 #define replicate_loop_consumer(sIndex, fIndex, iterator, iterOp, value, operation) \
     iterCountConsumer = fIndex - sIndex;                                            \
     groupIncompleteConsumer = iterCountConsumer % GROUP_GRANULARITY;                \
@@ -204,9 +216,16 @@ extern long consumerCount;
         }                                                                           \
     }                                                                               \
     if (groupIncompleteConsumer) RHT_Consume_Check(groupVarConsumer);
+#else
+#define replicate_loop_consumer(sIndex, fIndex, iterator, iterOp, value, operation) \
+    iterCountConsumer = fIndex - sIndex;                                            \
+    for(; iterCountConsumer-- > 0; iterOp){                                         \
+        operation;                                                                  \
+        RHT_Consume_Check(value);                                                   \
+    }
+#endif
 
-
-// must be inclosed in {}
+// must be inside {}
 #define Report_Soft_Error(consumerValue, producerValue) \
     printf("\n SOFT ERROR DETECTED, Consumer: %f Producer: %f -- PCount: %ld , CCount: %ld\n",  \
             consumerValue, producerValue, producerCount, consumerCount); \
@@ -275,6 +294,16 @@ static void RHT_Replication_Finish() {
 
 //////////// INTERNAL QUEUE METHODS BODY //////////////////
 
+#if APPROACH_WRITE_INVERTED_NEW_LIMIT == 1
+#define consumer_move_next()                                        \
+    globalQueue.deqPtr = (globalQueue.deqPtr + 1) % RHT_QUEUE_SIZE; consumerCount++;
+
+#else
+#define consumer_move_next()                                        \
+    globalQueue.content[globalQueue.deqPtr] = ALREADY_CONSUMED;     \
+    globalQueue.deqPtr = (globalQueue.deqPtr + 1) % RHT_QUEUE_SIZE;
+#endif
+
 // -------- Already Consumed Approach ----------
 
 static INLINE void AlreadyConsumed_Produce(double value) {
@@ -306,31 +335,8 @@ static INLINE double AlreadyConsumed_Consume() {
         value = globalQueue.content[globalQueue.deqPtr];
     }
 
-    globalQueue.content[globalQueue.deqPtr] = ALREADY_CONSUMED;
-    globalQueue.deqPtr = (globalQueue.deqPtr + 1) % RHT_QUEUE_SIZE;
+    consumer_move_next()
     return value;
-}
-
-#if APPROACH_WRITE_INVERTED_NEW_LIMIT == 1
-    #define consumer_move_next()                                        \
-        globalQueue.deqPtr = (globalQueue.deqPtr + 1) % RHT_QUEUE_SIZE; \
-        return;
-#else
-    #define consumer_move_next()                                        \
-       globalQueue.content[globalQueue.deqPtr] = ALREADY_CONSUMED;     \
-        globalQueue.deqPtr = (globalQueue.deqPtr + 1) % RHT_QUEUE_SIZE; \
-        return;
-#endif
-
-// compiler option -ffast-math, has a problem with isnan method
-static int are_both_nan(double pValue, double cValue){
-    if(_GLIBCXX_FAST_MATH){
-        // todo, how to check for nan when the optimization is enabled
-        printf("The -ffast-math is enabled and there is a problem checking for NaN values...\n\n\n");
-        exit(1);
-    }
-
-    return isnan(pValue) && isnan(cValue);
 }
 
 static INLINE void AlreadyConsumed_Consume_Check(double currentValue) {
@@ -343,6 +349,7 @@ static INLINE void AlreadyConsumed_Consume_Check(double currentValue) {
 #endif
     {
         consumer_move_next()
+        return;
     }
 
     // probably des-sync of the queue
@@ -365,11 +372,13 @@ static INLINE void AlreadyConsumed_Consume_Check(double currentValue) {
 #endif
         {
             consumer_move_next()
+            return;
         }
     }
 
     if (are_both_nan(currentValue, globalQueue.otherValue)){
         consumer_move_next()
+        return;
     }
 
     Report_Soft_Error(currentValue, globalQueue.otherValue)
@@ -420,60 +429,26 @@ static INLINE void UsingPointers_Consume_Check(double currentValue) {
 // -------- New Limit Approach ----------
 
 static INLINE void NewLimit_Produce(double value) {
-    globalQueue.content[globalQueue.enqPtr] = value;
-    globalQueue.enqPtr = (globalQueue.enqPtr + 1) % RHT_QUEUE_SIZE;
-}
-
-static INLINE double NewLimit_Consume() {
-    return AlreadyConsumed_Consume();
-}
-
-static INLINE void NewLimit_Consume_Check(double currentValue) {
-    AlreadyConsumed_Consume_Check(currentValue);
+    write_move_normal(value)
 }
 
 // -------- Write Inverted New Limit Approach ----------
 
 static INLINE void WriteInvertedNewLimit_Produce(double value) {
-    globalQueue.nextEnq = (globalQueue.enqPtr + 1) % RHT_QUEUE_SIZE;
-    globalQueue.content[globalQueue.nextEnq] = ALREADY_CONSUMED;
-//    asm volatile("" ::: "memory");
-    globalQueue.content[globalQueue.enqPtr] = value;
-    globalQueue.enqPtr = globalQueue.nextEnq;
+    write_move_inverted(value)
 }
 
-static INLINE double WriteInvertedNewLimit_Consume() {
-    double value = globalQueue.content[globalQueue.deqPtr];
-
-#if BRANCH_HINT == 1
-    if (__builtin_expect(fequal(value, ALREADY_CONSUMED), 0))
-#else
-    if (fequal(value, ALREADY_CONSUMED))
-#endif
-    {
-#if COUNT_QUEUE_DESYNC == 1
-        consumerCount++;
-#endif
-        do asm("pause"); while (fequal(globalQueue.content[globalQueue.deqPtr], ALREADY_CONSUMED));
-        value = globalQueue.content[globalQueue.deqPtr];
-    }
-
-    globalQueue.deqPtr = (globalQueue.deqPtr + 1) % RHT_QUEUE_SIZE;
-    return value;
-}
-
-static INLINE void WriteInvertedNewLimit_Consume_Check(double currentValue) {
-    AlreadyConsumed_Consume_Check(currentValue);
-}
 
 static INLINE void WriteInverted_Produce_Secure(double value){
-    while (!fequal(globalQueue.content[globalQueue.enqPtr], ALREADY_CONSUMED)) {
-        asm("pause");
-    }
-    globalQueue.nextEnq = (globalQueue.enqPtr + 1) % RHT_QUEUE_SIZE;
-    globalQueue.content[globalQueue.nextEnq] = ALREADY_CONSUMED;
-    globalQueue.content[globalQueue.enqPtr] = value;
-    globalQueue.enqPtr = globalQueue.nextEnq;
+
+    do {
+        calc_new_distance(globalQueue.newLimit)
+    }while(globalQueue.newLimit < 3);
+
+//    while (!fequal(globalQueue.content[globalQueue.enqPtr], ALREADY_CONSUMED)) {
+//        asm("pause");
+//    }
+    write_move_inverted(value)
 }
 
 

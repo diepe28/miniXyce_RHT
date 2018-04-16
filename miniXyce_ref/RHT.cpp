@@ -54,12 +54,8 @@ void RHT_Produce(double value) {
 void RHT_Consume_Check(double currentValue) {
 #if APPROACH_USING_POINTERS == 1
     UsingPointers_Consume_Check(currentValue);
-#elif APPROACH_ALREADY_CONSUMED == 1
+#elif APPROACH_ALREADY_CONSUMED == 1 || APPROACH_NEW_LIMIT == 1 || APPROACH_WRITE_INVERTED_NEW_LIMIT == 1
     AlreadyConsumed_Consume_Check(currentValue);
-#elif APPROACH_NEW_LIMIT == 1
-    NewLimit_Consume_Check(currentValue);
-#elif APPROACH_WRITE_INVERTED_NEW_LIMIT == 1
-    WriteInvertedNewLimit_Consume_Check(currentValue);
 #elif APPROACH_MOODY_CAMEL == 1
     MoodyCamel_Consume_Check(currentValue);
 #else
@@ -71,12 +67,8 @@ void RHT_Consume_Check(double currentValue) {
 double RHT_Consume() {
 #if APPROACH_USING_POINTERS == 1
     return UsingPointers_Consume();
-#elif APPROACH_ALREADY_CONSUMED == 1
+#elif APPROACH_ALREADY_CONSUMED == 1 || APPROACH_NEW_LIMIT == 1 || APPROACH_WRITE_INVERTED_NEW_LIMIT == 1
     return AlreadyConsumed_Consume();
-#elif APPROACH_NEW_LIMIT == 1
-    return NewLimit_Consume();
-#elif APPROACH_WRITE_INVERTED_NEW_LIMIT == 1
-    return WriteInvertedNewLimit_Consume();
 #elif APPROACH_MOODY_CAMEL == 1
     return MoodyCamel_Consume();
 #else
