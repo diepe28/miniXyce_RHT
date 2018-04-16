@@ -1144,7 +1144,6 @@ void mX_matrix_utils::gmres_producer(distributed_sparse_matrix* A, std::vector<d
                 new_col_H.push_back(global_dot);
             }
 
-
             double normTemp2 = norm_producer(temp2);
             /*-- RHT -- */ RHT_Produce_Secure(normTemp2);
             new_col_H.push_back(normTemp2);
@@ -1168,6 +1167,7 @@ void mX_matrix_utils::gmres_producer(distributed_sparse_matrix* A, std::vector<d
                                             double old_i_plus_one = new_col_H[i + 1];
                                             new_col_H[i] = cosines[i] * old_i + sines[i] * old_i_plus_one;
                                             new_col_H[i + 1] = -sines[i] * old_i + cosines[i] * old_i_plus_one;)
+
 
             double r = std::sqrt(new_col_H[iters - 1] * new_col_H[iters - 1] + new_col_H[iters] * new_col_H[iters]);
             /*-- RHT -- */ RHT_Produce_Secure(r);

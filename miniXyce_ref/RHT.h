@@ -16,6 +16,7 @@
 #include <pthread.h>
 #include <zconf.h>
 #include <cmath>
+#include <math.h>
 
 
 // -------- Macros ----------
@@ -311,45 +312,57 @@ static INLINE double AlreadyConsumed_Consume() {
     return value;
 }
 
+#if APPROACH_WRITE_INVERTED_NEW_LIMIT == 1
+    #define consumer_move_next()                                        \
+        globalQueue.deqPtr = (globalQueue.deqPtr + 1) % RHT_QUEUE_SIZE; \
+        return;
+#else
+    #define consumer_move_next()                                        \
+       globalQueue.content[globalQueue.deqPtr] = ALREADY_CONSUMED;     \
+        globalQueue.deqPtr = (globalQueue.deqPtr + 1) % RHT_QUEUE_SIZE; \
+        return;
+#endif
+
 static INLINE void AlreadyConsumed_Consume_Check(double currentValue) {
     globalQueue.otherValue = globalQueue.content[globalQueue.deqPtr];
 
 #if BRANCH_HINT == 1
-    if(__builtin_expect(fequal(currentValue, globalQueue.otherValue),1))
+    if (__builtin_expect(fequal(currentValue, globalQueue.otherValue), 1))
 #else
-    if(fequal(currentValue, globalQueue.otherValue))
+        if(fequal(currentValue, globalQueue.otherValue))
 #endif
     {
-        globalQueue.content[globalQueue.deqPtr] = ALREADY_CONSUMED;
-        globalQueue.deqPtr = (globalQueue.deqPtr + 1) % RHT_QUEUE_SIZE;
-    } else {
-        // des-sync of the queue
+        consumer_move_next()
+    }
+
+    // probably des-sync of the queue
+#if BRANCH_HINT == 1
+    if (__builtin_expect(fequal(globalQueue.otherValue, ALREADY_CONSUMED), 1))
+#else
+    if(fequal(globalQueue.otherValue, ALREADY_CONSUMED))
+#endif
+    {
 #if COUNT_QUEUE_DESYNC == 1
         consumerCount++;
 #endif
-#if BRANCH_HINT == 1
-        if(__builtin_expect(fequal(globalQueue.otherValue, ALREADY_CONSUMED), 1))
-#else
-        if(fequal(globalQueue.otherValue, ALREADY_CONSUMED))
-#endif
-        {
-            do asm("pause"); while (fequal(globalQueue.content[globalQueue.deqPtr], ALREADY_CONSUMED));
-            globalQueue.otherValue = globalQueue.content[globalQueue.deqPtr];
+        do asm("pause"); while (fequal(globalQueue.content[globalQueue.deqPtr], ALREADY_CONSUMED));
+        globalQueue.otherValue = globalQueue.content[globalQueue.deqPtr];
 
 #if BRANCH_HINT == 1
-            if (__builtin_expect(fequal(currentValue, globalQueue.otherValue), 1))
+        if (__builtin_expect(fequal(currentValue, globalQueue.otherValue), 1))
 #else
             if (fequal(currentValue, globalQueue.otherValue))
 #endif
-            {
-                globalQueue.content[globalQueue.deqPtr] = ALREADY_CONSUMED;
-                globalQueue.deqPtr = (globalQueue.deqPtr + 1) % RHT_QUEUE_SIZE;
-                return;
-            }
+        {
+            consumer_move_next()
         }
-
-        Report_Soft_Error(currentValue, globalQueue.otherValue)
     }
+
+    if (isnan(currentValue) && isnan(globalQueue.otherValue)){
+        consumer_move_next()
+    }
+
+    Report_Soft_Error(currentValue, globalQueue.otherValue)
 }
 
 // -------- Using Pointers Approach ----------
@@ -382,6 +395,12 @@ static INLINE void UsingPointers_Consume_Check(double currentValue) {
     }
 
     if (!fequal(globalQueue.content[globalQueue.deqPtr], currentValue)) {
+
+        if (isnan(globalQueue.content[globalQueue.deqPtr]) && isnan(currentValue)){
+            globalQueue.deqPtr = (globalQueue.deqPtr + 1) % RHT_QUEUE_SIZE;
+            return;
+        }
+
         Report_Soft_Error(currentValue, globalQueue.content[globalQueue.deqPtr])
     }
 
@@ -434,44 +453,7 @@ static INLINE double WriteInvertedNewLimit_Consume() {
 }
 
 static INLINE void WriteInvertedNewLimit_Consume_Check(double currentValue) {
-    globalQueue.otherValue = globalQueue.content[globalQueue.deqPtr];
-
-#if BRANCH_HINT == 1
-    if (__builtin_expect(fequal(currentValue, globalQueue.otherValue), 1))
-#else
-    if (fequal(currentValue, globalQueue.otherValue))
-#endif
-    {
-        globalQueue.deqPtr = (globalQueue.deqPtr + 1) % RHT_QUEUE_SIZE;
-    }
-    else{
-        // des-sync of the queue
-#if BRANCH_HINT == 1
-        if (__builtin_expect(fequal(globalQueue.otherValue, ALREADY_CONSUMED), 1))
-#else
-        if (fequal(globalQueue.otherValue, ALREADY_CONSUMED))
-#endif
-        {
-#if COUNT_QUEUE_DESYNC == 1
-            consumerCount++;
-#endif
-            do {
-                asm("pause");
-            } while (fequal(globalQueue.content[globalQueue.deqPtr], ALREADY_CONSUMED));
-
-#if BRANCH_HINT == 1
-            if (__builtin_expect(fequal(currentValue, globalQueue.content[globalQueue.deqPtr]), 1))
-#else
-            if (fequal(currentValue, globalQueue.content[globalQueue.deqPtr]))
-#endif
-            {
-                globalQueue.deqPtr = (globalQueue.deqPtr + 1) % RHT_QUEUE_SIZE;
-                return;
-            }
-            printf("The second time is also not equal ... \n");
-        }
-        Report_Soft_Error(currentValue, globalQueue.otherValue)
-    }
+    AlreadyConsumed_Consume_Check(currentValue);
 }
 
 static INLINE void WriteInverted_Produce_Secure(double value){

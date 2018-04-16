@@ -79,7 +79,7 @@ std::vector<double> mX_linear_DAE_utils::evaluate_b_producer(double t, mX_linear
             std::list<mX_scaled_source *>::iterator it3 = (*it2)->scaled_src_list.begin();
             int new_it3 = 0;
 
-            replicate_loop_producer(0, (*it2)->scaled_src_list.size(), new_it3, new_it3, sum,
+            replicate_loop_producer(0, (*it2)->scaled_src_list.size(), new_it3, new_it3++, sum,
                                     mX_source *src = (*it3)->src;
                                             sum += src->output((double) (t)) * ((*it3++)->scale);)
 
@@ -105,7 +105,7 @@ std::vector<double> mX_linear_DAE_utils::evaluate_b_consumer(double t, mX_linear
             std::list<mX_scaled_source *>::iterator it3 = (*it2)->scaled_src_list.begin();
             int new_it3 = 0;
 
-            replicate_loop_consumer(0, (*it2)->scaled_src_list.size(), new_it3, new_it3, sum,
+            replicate_loop_consumer(0, (*it2)->scaled_src_list.size(), new_it3, new_it3++, sum,
                                     mX_source *src = (*it3)->src;
                                             sum += src->output((double) (t)) * ((*it3++)->scale);)
 

@@ -68,9 +68,9 @@ typedef struct {
 
 void consumer_thread_func(void * args);
 
-double main_execution_replicated(int p, int pid, int n, int argc, char* argv[]);
+void main_execution_replicated(int p, int pid, int n, int argc, char* argv[]);
 
-double main_execution(int p, int pid, int n, int argc, char* argv[]);
+void main_execution(int p, int pid, int n, int argc, char* argv[]);
 
 int main(int argc, char* argv[]) {
     // this is of course, the actual transient simulator
@@ -181,7 +181,7 @@ int main(int argc, char* argv[]) {
     return 0;
 }
 
-double main_execution(int p, int pid, int n, int argc, char* argv[]) {
+void main_execution(int p, int pid, int n, int argc, char* argv[]) {
 
     double sim_start = mX_timer();
 
@@ -453,11 +453,9 @@ double main_execution(int p, int pid, int n, int argc, char* argv[]) {
 
     // Clean up
     mX_linear_DAE_utils::destroy(dae);
-
-    return sim_end;
 }
 
-double main_execution_replicated(int p, int pid, int n, int argc, char* argv[]) {
+void main_execution_replicated(int p, int pid, int n, int argc, char* argv[]) {
     double sim_start = mX_timer();
 
     // initialize the simulation parameters
@@ -785,8 +783,6 @@ double main_execution_replicated(int p, int pid, int n, int argc, char* argv[]) 
 
     // Clean up
     mX_linear_DAE_utils::destroy(dae);
-
-    return sim_end;
 }
 
 void consumer_thread_func(void *args) {

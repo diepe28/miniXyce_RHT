@@ -60,6 +60,8 @@ target_link_libraries(miniXyceRHT ${MPI_LIBRARIES})
 
 target_link_libraries(miniXyceRHT pthread)
 
+target_link_libraries(miniXyceRHT m) #math
+
 if(MPI_COMPILE_FLAGS)
     set_target_properties(miniXyceRHT PROPERTIES
             COMPILE_FLAGS "${MPI_COMPILE_FLAGS}")
