@@ -79,21 +79,24 @@ int main(int argc, char* argv[]) {
     int p = 1, pid = 0, n = 0, replicated = 0;
     int producerCore = 0, consumerCore = 2, numThreads = 2;
 
-    //dperez, example of execution: -c tests/cir1.net 2 0 1
-    if(argc == 6) {
-        replicated = 1;
-        numThreads = atoi(argv[3]);
-        producerCore = atoi(argv[4]);
-        consumerCore = atoi(argv[5]);
-        argc -= 3;
-    }
-
 #ifdef HAVE_MPI
     MPI_Init(&argc, &argv);
 
     MPI_Comm_size(MPI_COMM_WORLD, &p);
     MPI_Comm_rank(MPI_COMM_WORLD, &pid);
 #endif
+
+    //dperez, example of execution: -c tests/cir1.net 2 0 1
+    if(argc > 4) {
+        replicated = 1;
+        numThreads = atoi(argv[3]);
+
+        producerCore = atoi(argv[pid * 2 + 4]);
+        consumerCore = atoi(argv[pid * 2 + 5]);
+
+        argc -= numThreads + 1;
+    }
+
     // initialize the simulation parameters
     double times = 0;
     struct timespec start, finish;
@@ -139,8 +142,6 @@ int main(int argc, char* argv[]) {
 
             pthread_t myThread;
 
-//            int err = pthread_create(consumerThreads[0], NULL, (void *(*)(void *)) consumer_thread_func,
-//                                     (void *) consumerParams);
             int err = pthread_create(&myThread, NULL, (void *(*)(void *)) consumer_thread_func, (void *) consumerParams);
 
             if (err) {
@@ -534,6 +535,12 @@ void main_execution_replicated(int p, int pid, int n, int argc, char* argv[]) {
     MPI_Allreduce(&num_my_rows, &sum_rows, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
     MPI_Allreduce(&num_my_rows, &min_rows, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD);
     MPI_Allreduce(&num_my_rows, &max_rows, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
+    /*-- RHT -- */ RHT_Produce(sum_nnz);
+    /*-- RHT -- */ RHT_Produce(min_nnz);
+    /*-- RHT -- */ RHT_Produce(max_nnz);
+    /*-- RHT -- */ RHT_Produce(sum_rows);
+    /*-- RHT -- */ RHT_Produce(min_rows);
+    /*-- RHT -- */ RHT_Produce(max_rows);
 #endif
 
     doc.add("Matrix_attributes", "");
@@ -602,6 +609,7 @@ void main_execution_replicated(int p, int pid, int n, int argc, char* argv[]) {
 
     std::string out_filename = ckt_netlist_filename.substr(0, dot_position) + "_tran_results.prn";
     std::ofstream *outfile = 0;
+
 
 #ifdef HAVE_MPI
     // Prepare rcounts and displs for a contiguous gather of the full solution vector.
@@ -866,6 +874,15 @@ void consumer_thread_func(void *args) {
     int min_nnz = num_my_nnz, max_nnz = num_my_nnz;
     int min_rows = num_my_rows, max_rows = num_my_rows, sum_rows = num_my_rows;
 
+#ifdef HAVE_MPI
+    /*-- RHT -- */ sum_nnz = RHT_Consume();
+    /*-- RHT -- */ min_nnz = RHT_Consume();
+    /*-- RHT -- */ max_nnz = RHT_Consume();
+    /*-- RHT -- */ sum_rows = RHT_Consume();
+    /*-- RHT -- */ min_rows = RHT_Consume();
+    /*-- RHT -- */ max_rows = RHT_Consume();
+#endif
+
     /*-- RHT -- */ RHT_Consume_Check(sum_rows);
     /*-- RHT -- */ RHT_Consume_Check(min_rows);
     /*-- RHT -- */ RHT_Consume_Check(max_rows);
@@ -922,14 +939,14 @@ void consumer_thread_func(void *args) {
             }
             /*-- RHT -- */ RHT_Consume_Volatile(tempVar);
         }
-    }
 
-    for (int i = 0; i < sum_rows; i++) {
+        for (int i = 0; i < sum_rows; i++) {
 #ifdef HAVE_MPI
-        RHT_Consume_Volatile(fullX[i]);
+            RHT_Consume_Volatile(fullX[i]);
 #else
-        RHT_Consume_Volatile(init_cond[i]);
+            RHT_Consume_Volatile(init_cond[i]);
 #endif
+        }
     }
 
     // from now you won't be needing any more Ax = b solves

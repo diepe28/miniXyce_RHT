@@ -815,9 +815,11 @@ double mX_matrix_utils::norm_producer(std::vector<double> &x) {
     double global_norm;
     double local_norm = 0.0;
     int i = 0;
+
     replicate_loop_producer(0, x.size(), i, i++, local_norm, local_norm += x[i] * x[i])
 #ifdef HAVE_MPI
     MPI_Allreduce(&local_norm, &global_norm, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    /*-- RHT -- */ RHT_Produce_Secure(global_norm);
 #else
     global_norm = local_norm;
 #endif
@@ -831,10 +833,10 @@ double mX_matrix_utils::norm_consumer(std::vector<double> &x) {
     double global_norm;
     double local_norm = 0.0;
     int i = 0;
+
     replicate_loop_consumer(i, x.size(), i, i++, local_norm, local_norm += x[i] * x[i])
 #ifdef HAVE_MPI
-//    MPI_Allreduce(&local_norm, &global_norm, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    global_norm = local_norm;
+    /*-- RHT -- */ global_norm = RHT_Consume();
 #else
     global_norm = local_norm;
 #endif
@@ -1141,7 +1143,7 @@ void mX_matrix_utils::gmres_producer(distributed_sparse_matrix* A, std::vector<d
                                         local_dot += temp2[j - start_row] * V[j - start_row][i])
 #ifdef HAVE_MPI
                 MPI_Allreduce(&local_dot,&global_dot,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
-                /*-- RHT -- */ RHT_Produce(global_dot);
+                /*-- RHT -- */ RHT_Produce_Secure(global_dot);
 #else
                 global_dot = local_dot;
 #endif
