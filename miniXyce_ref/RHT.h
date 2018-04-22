@@ -29,7 +29,7 @@
 #define INLINE inline __attribute__((always_inline))
 #define EPSILON 0.000001
 #define fequal(a,b) (fabs(a-b) < EPSILON)
-#define TEST_NUM_RUNS 5
+#define TEST_NUM_RUNS 3
 
 typedef struct {
     volatile int deqPtr;
@@ -99,7 +99,7 @@ static int are_both_nan(double pValue, double cValue){
     globalQueue.content[globalQueue.nextEnq] = ALREADY_CONSUMED;        \
     /*asm volatile("" ::: "memory");*/                                  \
     globalQueue.content[globalQueue.enqPtr] = value;                    \
-    globalQueue.enqPtr = globalQueue.nextEnq; producerCount++;
+    globalQueue.enqPtr = globalQueue.nextEnq;
 
 #if APPROACH_WRITE_INVERTED_NEW_LIMIT == 1
 #define write_move(value) write_move_inverted(value)
@@ -296,7 +296,7 @@ static void RHT_Replication_Finish() {
 
 #if APPROACH_WRITE_INVERTED_NEW_LIMIT == 1
 #define consumer_move_next()                                        \
-    globalQueue.deqPtr = (globalQueue.deqPtr + 1) % RHT_QUEUE_SIZE; consumerCount++;
+    globalQueue.deqPtr = (globalQueue.deqPtr + 1) % RHT_QUEUE_SIZE;
 
 #else
 #define consumer_move_next()                                        \

@@ -629,13 +629,14 @@ void mX_matrix_utils::sparse_matrix_vector_product_producer(distributed_sparse_m
 
 #ifdef HAVE_MPI
     // ok, now's the time to follow the send instructions that each pid has been maintaining
-
+    //dperez, todo, replicate using our scheme
     std::list<data_transfer_instruction *>::iterator it1;
 
     for (it1 = A->send_instructions.begin(); it1 != A->send_instructions.end(); it1++) {
         std::list<int>::iterator it2;
 
         for (it2 = (*it1)->indices.begin(); it2 != (*it1)->indices.end(); it2++) {
+            /*-- RHT -- */ RHT_Produce_Volatile(x[(*it2) - start_row]);
             MPI_Send(&x[(*it2) - start_row], 1, MPI_DOUBLE, (*it1)->pid, *it2, MPI_COMM_WORLD);
         }
     }
@@ -687,6 +688,7 @@ void mX_matrix_utils::sparse_matrix_vector_product_producer(distributed_sparse_m
                     double x_vec_entry;
                     MPI_Status status;
                     MPI_Recv(&x_vec_entry, 1, MPI_DOUBLE, MPI_ANY_SOURCE, col_idx, MPI_COMM_WORLD, &status);
+                    /*-- RHT -- */ RHT_Produce_Secure(x_vec_entry);
 
                     x_vec_entries[col_idx] = x_vec_entry;
                     y[i - start_row] += x_vec_entry * (curr->value);
@@ -720,7 +722,8 @@ void mX_matrix_utils::sparse_matrix_vector_product_consumer(distributed_sparse_m
         std::list<int>::iterator it2;
 
         for (it2 = (*it1)->indices.begin(); it2 != (*it1)->indices.end(); it2++) {
-            MPI_Send(&x[(*it2) - start_row], 1, MPI_DOUBLE, (*it1)->pid, *it2, MPI_COMM_WORLD);
+            /*-- RHT -- */ RHT_Consume_Volatile(x[(*it2) - start_row]);
+            //NOT REPLICATED --- MPI_Send(&x[(*it2) - start_row], 1, MPI_DOUBLE, (*it1)->pid, *it2, MPI_COMM_WORLD);
         }
     }
 #endif
@@ -731,6 +734,7 @@ void mX_matrix_utils::sparse_matrix_vector_product_consumer(distributed_sparse_m
     std::map<int, double> x_vec_entries;
     std::map<int, double>::iterator it3;
 
+    //dperez, todo, replicate this loop in our scheme
     for (int i = start_row; i <= end_row; i++) {
         // compute the mat_vec product for the i'th row
 
@@ -768,8 +772,9 @@ void mX_matrix_utils::sparse_matrix_vector_product_consumer(distributed_sparse_m
                     // continues with the matrix vector multiplication
 
                     double x_vec_entry;
-                    MPI_Status status;
-                    MPI_Recv(&x_vec_entry, 1, MPI_DOUBLE, MPI_ANY_SOURCE, col_idx, MPI_COMM_WORLD, &status);
+                    //MPI_Status status;
+                    //NOT REPLICATED MPI_Recv(&x_vec_entry, 1, MPI_DOUBLE, MPI_ANY_SOURCE, col_idx, MPI_COMM_WORLD, &status);
+                    /*-- RHT -- */ x_vec_entry = RHT_Consume();
 
                     x_vec_entries[col_idx] = x_vec_entry;
                     y[i - start_row] += x_vec_entry * (curr->value);
@@ -828,7 +833,8 @@ double mX_matrix_utils::norm_consumer(std::vector<double> &x) {
     int i = 0;
     replicate_loop_consumer(i, x.size(), i, i++, local_norm, local_norm += x[i] * x[i])
 #ifdef HAVE_MPI
-    MPI_Allreduce(&local_norm, &global_norm, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+//    MPI_Allreduce(&local_norm, &global_norm, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    global_norm = local_norm;
 #else
     global_norm = local_norm;
 #endif
@@ -1135,10 +1141,10 @@ void mX_matrix_utils::gmres_producer(distributed_sparse_matrix* A, std::vector<d
                                         local_dot += temp2[j - start_row] * V[j - start_row][i])
 #ifdef HAVE_MPI
                 MPI_Allreduce(&local_dot,&global_dot,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+                /*-- RHT -- */ RHT_Produce(global_dot);
 #else
                 global_dot = local_dot;
 #endif
-                /*-- RHT -- */ RHT_Produce_Secure(global_dot);
                 j = start_row;
                 replicate_loop_producer(start_row, end_row + 1, j, j++,
                                         temp2[j - start_row],
@@ -1359,11 +1365,10 @@ void mX_matrix_utils::gmres_consumer(distributed_sparse_matrix* A, std::vector<d
                                         local_dot,
                                         local_dot += temp2[j - start_row] * V[j - start_row][i])
 #ifdef HAVE_MPI
-                MPI_Allreduce(&local_dot,&global_dot,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+                /*-- RHT -- */ global_dot = RHT_Consume();
 #else
                 global_dot = local_dot;
 #endif
-                /*-- RHT -- */ RHT_Consume_Check(global_dot);
                 j = start_row;
                 replicate_loop_consumer(start_row, end_row + 1, j, j++,
                                         temp2[j - start_row],

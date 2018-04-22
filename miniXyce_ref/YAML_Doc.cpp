@@ -29,46 +29,49 @@ YAML_Doc::~YAML_Doc(void){
 * generates YAML from the elements of the document and saves it
 * to a file
 */
-string YAML_Doc::generateYAML(){
-  string yaml;
-  yaml =  yaml + "Mini-Application Name: " + miniAppName + "\n";
-  yaml =  yaml + "Mini-Application Version: " + miniAppVersion + "\n";
-  for(size_t i=0; i<children.size(); i++){
-    yaml = yaml + children[i]->printYAML("");
-  }
-  
-  time_t rawtime;
-  tm * ptm;
-  time ( &rawtime );
-  ptm = localtime(&rawtime);
-  char sdate[25];
-  //use tm_mon+1 because tm_mon is 0 .. 11 instead of 1 .. 12
-  sprintf (sdate,"%04d:%02d:%02d-%02d:%02d:%02d",ptm->tm_year + 1900, ptm->tm_mon+1,
-    ptm->tm_mday, ptm->tm_hour, ptm->tm_min,ptm->tm_sec);
+string YAML_Doc::generateYAML() {
+    string yaml;
+    yaml = yaml + "Mini-Application Name: " + miniAppName + "\n";
+    yaml = yaml + "Mini-Application Version: " + miniAppVersion + "\n";
+    for (size_t i = 0; i < children.size(); i++) {
+        yaml = yaml + children[i]->printYAML("");
+        //delete children[i];
+    }
 
-  string filename;
-  if (destinationFileName=="") 
-    filename = miniAppName + "-" + miniAppVersion + "_";
-  else 
-    filename = destinationFileName;
-  filename = filename + string(sdate) + ".yaml";
-  if (destinationDirectory!="" && destinationDirectory!=".") {
-    string mkdir_cmd = "mkdir " + destinationDirectory;
+
+    time_t rawtime;
+    tm *ptm;
+    time(&rawtime);
+    ptm = localtime(&rawtime);
+    char sdate[25];
+    //use tm_mon+1 because tm_mon is 0 .. 11 instead of 1 .. 12
+    sprintf(sdate, "%04d:%02d:%02d-%02d:%02d:%02d", ptm->tm_year + 1900, ptm->tm_mon + 1,
+            ptm->tm_mday, ptm->tm_hour, ptm->tm_min, ptm->tm_sec);
+
+    string filename;
+    if (destinationFileName == "")
+        filename = miniAppName + "-" + miniAppVersion + "_";
+    else
+        filename = destinationFileName;
+    filename = filename + string(sdate) + ".yaml";
+    if (destinationDirectory != "" && destinationDirectory != ".") {
+        string mkdir_cmd = "mkdir " + destinationDirectory;
 #ifdef REDSTORM
-    mkdir(destinationDirectory.c_str(),0755);
+        mkdir(destinationDirectory.c_str(),0755);
 #else
-    system(mkdir_cmd.c_str());
+        system(mkdir_cmd.c_str());
 #endif
-    filename = destinationDirectory + "/" + destinationFileName;
-  }
-  else 
-    filename = "./" + filename;
+        filename = destinationDirectory + "/" + destinationFileName;
+    } else
+        filename = "./" + filename;
 
-  ofstream myfile;
-  myfile.open(filename.c_str());
-  myfile << yaml;
-  myfile.close();
-  return yaml;
+#if PRINT_OUTPUT_FILES == 1
+    ofstream myfile;
+    myfile.open(filename.c_str());
+    myfile << yaml;
+    myfile.close();
+#endif
+    return yaml;
 }
 
 

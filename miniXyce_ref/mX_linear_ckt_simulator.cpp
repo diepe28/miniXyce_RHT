@@ -72,6 +72,8 @@ void main_execution_replicated(int p, int pid, int n, int argc, char* argv[]);
 
 void main_execution(int p, int pid, int n, int argc, char* argv[]);
 
+//dperez, todo remove the constant part of the execution from the time measurement. Just leave the replicated part.
+
 int main(int argc, char* argv[]) {
     // this is of course, the actual transient simulator
     int p = 1, pid = 0, n = 0, replicated = 0;
@@ -605,11 +607,28 @@ void main_execution_replicated(int p, int pid, int n, int argc, char* argv[]) {
     // Prepare rcounts and displs for a contiguous gather of the full solution vector.
     std::vector<int> rcounts(p, 0), displs(p, 0);
     MPI_Gather(&num_my_rows, 1, MPI_INT, &rcounts[0], 1, MPI_INT, 0, MPI_COMM_WORLD);
-    for (int i = 1; i < p; i++) displs[i] = displs[i - 1] + rcounts[i - 1];
+    int i;
+    for (i = 1; i < p; i++) displs[i] = displs[i - 1] + rcounts[i - 1];
 
     std::vector<double> fullX(sum_rows, 0.0);
     MPI_Gatherv(&init_cond[0], num_my_rows, MPI_DOUBLE, &fullX[0], &rcounts[0], &displs[0], MPI_DOUBLE, 0,
                 MPI_COMM_WORLD);
+
+    /*-- RHT -- */ // MPI values from all processors
+    i = 0;
+    iterCountProducer = sum_rows;
+    wait_for_consumer(globalQueue.diff)
+    while (globalQueue.diff < iterCountProducer) {
+        iterCountProducer -= globalQueue.diff;
+        for (; globalQueue.diff-- > 0; i++) {
+            write_move(fullX[i])
+        }
+        wait_for_consumer(globalQueue.diff)
+    }
+    for (; iterCountProducer-- > 0; i++) {
+        write_move(fullX[i])
+    }
+
 #endif
 
     if (pid == 0) {
@@ -642,8 +661,10 @@ void main_execution_replicated(int p, int pid, int n, int argc, char* argv[]) {
 
         for (int i = 0; i < sum_rows; i++) {
 #ifdef HAVE_MPI
+            RHT_Produce_Volatile(fullX[i]);
             *outfile << std::setw(18) << fullX[i];
 #else
+            RHT_Produce_Volatile(init_cond[i]);
             *outfile << std::setw(18) << init_cond[i];
 #endif
         }
@@ -721,6 +742,9 @@ void main_execution_replicated(int p, int pid, int n, int argc, char* argv[]) {
 #ifdef HAVE_MPI
         MPI_Gatherv(&init_cond[0], num_my_rows, MPI_DOUBLE, &fullX[0], &rcounts[0], &displs[0], MPI_DOUBLE, 0,
                     MPI_COMM_WORLD);
+        //dperez, todo, should we also send this fullX values, after it is received is written, but we would not replicate
+        // the MPI instructions, so what we would do is send the values to the consumer just to be validated, but the
+        // values are not changed so, there is no point in sending it
 #endif
         if (pid == 0) {
             outfile->precision(8);
@@ -876,6 +900,18 @@ void consumer_thread_func(void *args) {
         /*-- RHT -- */ RHT_Consume_Volatile(res);
     }
 
+#ifdef HAVE_MPI
+    // Prepare rcounts and displs for a contiguous gather of the full solution vector.
+    std::vector<int> rcounts(p, 0), displs(p, 0);
+    std::vector<double> fullX(sum_rows, 0.0);
+
+    /*-- RHT -- */ // MPI values from all processors
+    for(int i = 0; i < sum_rows; i++){
+        fullX[i] = RHT_Consume();
+    }
+
+#endif
+
     if (pid == 0) {
         for (int i = 0; i < sum_rows; i++) {
             if (i < num_internal_nodes) {
@@ -886,6 +922,14 @@ void consumer_thread_func(void *args) {
             }
             /*-- RHT -- */ RHT_Consume_Volatile(tempVar);
         }
+    }
+
+    for (int i = 0; i < sum_rows; i++) {
+#ifdef HAVE_MPI
+        RHT_Consume_Volatile(fullX[i]);
+#else
+        RHT_Consume_Volatile(init_cond[i]);
+#endif
     }
 
     // from now you won't be needing any more Ax = b solves

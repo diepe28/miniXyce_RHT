@@ -40,6 +40,9 @@
 
 using namespace mX_parms_utils;
 
+char * LAST_USED_PARAMS_FILE_PATH = "/home/diego/Documents/workspace/miniXyce_RHT/cmake-build-debug/last_used_params.txt";
+char * DEFAULT_PARAMS_FILE_PATH = "/home/diego/Documents/workspace/miniXyce_RHT/cmake-build-debug/default_params.txt";
+
 void mX_parms_utils::parse_command_line(int argc, std::vector<std::string> &argv, std::string &ckt_filename,
                                         double &t_start, double &t_step, double &t_stop, double &tol, int &k,
                                         std::vector<double> &init_cond, std::string &parms_file,
@@ -270,12 +273,12 @@ void mX_parms_utils::get_parms(int argc, char* argv[], std::string &ckt_filename
 
 	if (specified_parms.find(PREV) != specified_parms.end())
 	{
-		std::string filename = "last_used_params.txt";
+		std::string filename = LAST_USED_PARAMS_FILE_PATH;
 		argv_strings = get_command_line_equivalent_from_file(filename);
 		parse_command_line(argv_strings.size(), argv_strings, ckt_filename, t_start, t_step, t_stop, tol, k, init_cond, parms_file, specified_parms, p, pid);
 	}
 
-	std::string filename = "default_params.txt";
+	std::string filename = DEFAULT_PARAMS_FILE_PATH;
 	argv_strings = get_command_line_equivalent_from_file(filename);
 	parse_command_line(argv_strings.size(), argv_strings, ckt_filename, t_start, t_step, t_stop, tol, k, init_cond, parms_file, specified_parms, p, pid);
 	
@@ -294,7 +297,7 @@ void mX_parms_utils::get_parms(int argc, char* argv[], std::string &ckt_filename
 
 	if (pid == 0)
 	{
-		filename = "last_used_params.txt";
+		filename = LAST_USED_PARAMS_FILE_PATH;
 		std::ofstream outfile(filename.data(), std::ios::out);
 		
 		outfile << "circuit " << "= " << ckt_filename << std::endl;

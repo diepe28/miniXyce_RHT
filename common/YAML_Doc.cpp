@@ -35,7 +35,7 @@ string YAML_Doc::generateYAML() {
     yaml = yaml + "Mini-Application Version: " + miniAppVersion + "\n";
     for (size_t i = 0; i < children.size(); i++) {
         yaml = yaml + children[i]->printYAML("");
-        delete children[i];
+        //delete children[i];
     }
 
     time_t rawtime;
@@ -64,10 +64,13 @@ string YAML_Doc::generateYAML() {
     } else
         filename = "./" + filename;
 
+#if PRINT_OUTPUT_FILES == 1
     ofstream myfile;
     myfile.open(filename.c_str());
     myfile << yaml;
     myfile.close();
+#endif
+
     return yaml;
 }
 
