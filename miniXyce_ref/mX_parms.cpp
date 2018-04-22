@@ -40,8 +40,11 @@
 
 using namespace mX_parms_utils;
 
-char * LAST_USED_PARAMS_FILE_PATH = "/home/diego/Documents/workspace/miniXyce_RHT/cmake-build-debug/last_used_params.txt";
-char * DEFAULT_PARAMS_FILE_PATH = "/home/diego/Documents/workspace/miniXyce_RHT/cmake-build-debug/default_params.txt";
+char LAST_USED_PARAMS_FILE_PATH[200];
+char DEFAULT_PARAMS_FILE_PATH[200];
+
+char LAST_USED_PARAMS_FILE_NAME[30] = "last_used_params.txt";
+char DEFAULT_PARAMS_FILE_NAME[30] = "default_params.txt";
 
 void mX_parms_utils::parse_command_line(int argc, std::vector<std::string> &argv, std::string &ckt_filename,
                                         double &t_start, double &t_step, double &t_stop, double &tol, int &k,

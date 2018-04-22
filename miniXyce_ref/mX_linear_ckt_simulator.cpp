@@ -78,6 +78,7 @@ int main(int argc, char* argv[]) {
     // this is of course, the actual transient simulator
     int p = 1, pid = 0, n = 0, replicated = 0;
     int producerCore = 0, consumerCore = 2, numThreads = 2;
+    char * basePath;
 
 #ifdef HAVE_MPI
     MPI_Init(&argc, &argv);
@@ -86,15 +87,19 @@ int main(int argc, char* argv[]) {
     MPI_Comm_rank(MPI_COMM_WORLD, &pid);
 #endif
 
-    //dperez, example of execution: -c tests/cir1.net 2 0 1
-    if(argc > 4) {
+    //dperez, example of execution: -c tests/cir1.net /home/diego/Documents/workspace/miniXyce_RHT/cmake-build-debug 2 0 1
+    if(argc > 5) {
         replicated = 1;
-        numThreads = atoi(argv[3]);
+        basePath = argv[3];
+        numThreads = atoi(argv[4]);
 
-        producerCore = atoi(argv[pid * 2 + 4]);
-        consumerCore = atoi(argv[pid * 2 + 5]);
+        sprintf(DEFAULT_PARAMS_FILE_PATH, "%s/%s", basePath, DEFAULT_PARAMS_FILE_NAME);
+        sprintf(LAST_USED_PARAMS_FILE_PATH, "%s/%s", basePath, LAST_USED_PARAMS_FILE_NAME);
 
-        argc -= numThreads + 1;
+        producerCore = atoi(argv[pid * 2 + 5]);
+        consumerCore = atoi(argv[pid * 2 + 6]);
+
+        argc -= (numThreads + 2);
     }
 
     // initialize the simulation parameters
@@ -114,15 +119,17 @@ int main(int argc, char* argv[]) {
             elapsed = (finish.tv_sec - start.tv_sec);
             elapsed += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
 
-            printf("\nActual Walltime in seconds: %f \n ", elapsed);
-
-            times += elapsed;
-
-            printf("\n-----------------\n\n");
+            if(pid == 0) {
+                printf("\nActual Walltime in seconds: %f \n ", elapsed);
+                times += elapsed;
+                printf("\n-----------------\n\n");
+            }
         }
 
-        printf("\n -------- Summary Baseline ----------- \n");
-        printf("Mean time in seconds: %f \n\n", times / TEST_NUM_RUNS);
+        if(pid == 0) {
+            printf("\n -------- Summary Baseline ----------- \n");
+            printf("Mean time in seconds: %f \n\n", times / TEST_NUM_RUNS);
+        }
 
     } else {
         SetThreadAffinity(producerCore);
@@ -149,30 +156,36 @@ int main(int argc, char* argv[]) {
                 exit(1);
             }
 
-            clock_gettime(CLOCK_MONOTONIC, &start);
-            {
+            if(pid == 0) {
+                clock_gettime(CLOCK_MONOTONIC, &start);
+                {
+                    main_execution_replicated(p, pid, n, argc, argv);
+                    pthread_join(myThread, NULL);
+                }
+                clock_gettime(CLOCK_MONOTONIC, &finish);
+
+                elapsed = (finish.tv_sec - start.tv_sec);
+                elapsed += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
+
+                printf("\nActual Walltime in seconds: %f \n ", elapsed);
+                times += elapsed;
+                printf("\n-----------------\n\n");
+            }else{
                 main_execution_replicated(p, pid, n, argc, argv);
                 pthread_join(myThread, NULL);
             }
-            clock_gettime(CLOCK_MONOTONIC, &finish);
-
-            elapsed = (finish.tv_sec - start.tv_sec);
-            elapsed += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
-
-            printf("\nActual Walltime in seconds: %f \n ", elapsed);
-
-            times += elapsed;
 
             // params that need to be reset each time
             if (consumerParams)
                 delete consumerParams;
 
             RHT_Replication_Finish();
-            printf("\n-----------------\n\n");
         }
 
-        printf("\n -------- Summary Replicated ----------- \n");
-        printf("Mean time in seconds: %f \n\n", times / TEST_NUM_RUNS);
+        if(pid == 0) {
+            printf("\n -------- Summary Replicated ----------- \n");
+            printf("Mean time in seconds: %f \n\n", times / TEST_NUM_RUNS);
+        }
 
 #ifdef HAVE_MPI
         MPI_Finalize();
@@ -454,7 +467,9 @@ void main_execution(int p, int pid, int n, int argc, char* argv[]) {
 
     if (pid == 0) { // Only PE 0 needs to compute and report timing results
         std::__cxx11::string yaml = doc.generateYAML();
+#if PRINT_OUTPUT == 1
         std::cout << yaml;
+#endif
     }
 
     // Clean up
@@ -811,9 +826,10 @@ void main_execution_replicated(int p, int pid, int n, int argc, char* argv[]) {
     doc.add("Total Simulation Time", sim_end);
 
     if (pid == 0) { // Only PE 0 needs to compute and report timing results
-
         std::string yaml = doc.generateYAML();
+#if PRINT_OUTPUT == 1
         std::cout << yaml;
+#endif
     }
 
     // Clean up

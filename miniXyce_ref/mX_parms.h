@@ -37,6 +37,11 @@
 #include <set>
 #include <vector>
 
+extern char LAST_USED_PARAMS_FILE_PATH[200];
+extern char DEFAULT_PARAMS_FILE_PATH[200];
+extern char LAST_USED_PARAMS_FILE_NAME[30];
+extern char DEFAULT_PARAMS_FILE_NAME[30];
+
 namespace mX_parms_utils
 {
 	enum parm_names{CKT_FILENAME,T_START,T_STEP,T_STOP,TOL,K,INIT_COND,PARMS_FILE,PREV};
