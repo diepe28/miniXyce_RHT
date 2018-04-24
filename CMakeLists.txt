@@ -34,28 +34,27 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DCOUNT_QUEUE_DESYNC=0")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DBRANCH_HINT=1") # should always be true
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DVAR_GROUPING=1") #only works for new limit and write inverted new limit
 
-set(SOURCE_FILES ../miniXyce_RHT/miniXyce_ref/mX_linear_ckt_simulator.cpp
-        ../miniXyce_RHT/miniXyce_ref/mX_source.cpp
-        ../miniXyce_RHT/miniXyce_ref/mX_source.h
-        ../miniXyce_RHT/miniXyce_ref/mX_linear_DAE.cpp
-        ../miniXyce_RHT/miniXyce_ref/mX_linear_DAE.h
-        ../miniXyce_RHT/miniXyce_ref/mX_parms.cpp
-        ../miniXyce_RHT/miniXyce_ref/mX_parms.h
-        ../miniXyce_RHT/miniXyce_ref/mX_sparse_matrix.cpp
-        ../miniXyce_RHT/miniXyce_ref/mX_sparse_matrix.h
-        ../miniXyce_RHT/miniXyce_ref/mX_parser.cpp
-        ../miniXyce_RHT/miniXyce_ref/mX_parser.h
-        ../miniXyce_RHT/miniXyce_ref/YAML_Doc.cpp
-        ../miniXyce_RHT/miniXyce_ref/YAML_Doc.hpp
-        ../miniXyce_RHT/miniXyce_ref/YAML_Element.cpp
-        ../miniXyce_RHT/miniXyce_ref/YAML_Element.hpp
-        ../miniXyce_RHT/miniXyce_ref/mX_timer.cpp
-        ../miniXyce_RHT/miniXyce_ref/mX_timer.h
-        ../miniXyce_RHT/miniXyce_ref/RHT.cpp
-        ../miniXyce_RHT/miniXyce_ref/RHT.h
+set(SOURCE_FILES
+        miniXyce_ref/mX_source.cpp
+        miniXyce_ref/mX_linear_ckt_simulator.cpp
+        miniXyce_ref/mX_source.h
+        miniXyce_ref/mX_linear_DAE.cpp
+        miniXyce_ref/mX_linear_DAE.h
+        miniXyce_ref/mX_parms.cpp
+        miniXyce_ref/mX_parms.h
+        miniXyce_ref/mX_sparse_matrix.cpp
+        miniXyce_ref/mX_sparse_matrix.h
+        miniXyce_ref/mX_parser.cpp
+        miniXyce_ref/mX_parser.h
+        miniXyce_ref/YAML_Doc.cpp
+        miniXyce_ref/YAML_Doc.hpp
+        miniXyce_ref/YAML_Element.cpp
+        miniXyce_ref/YAML_Element.hpp
+        miniXyce_ref/mX_timer.cpp
+        miniXyce_ref/mX_timer.h
+        miniXyce_ref/RHT.cpp
+        miniXyce_ref/RHT.h
         )
-
-#../miniXyce_RHT/miniXyce_ref/miniXyce_info.hpp
 
 add_executable(miniXyceRHT ${SOURCE_FILES})
 
