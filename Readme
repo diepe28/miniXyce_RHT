@@ -1,0 +1,7 @@
+To compile execute the following commands
+
+    cd cmake-build-debug/
+    cmake ..
+    make
+
+Thats it!
