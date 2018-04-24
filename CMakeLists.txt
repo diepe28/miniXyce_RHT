@@ -16,13 +16,16 @@ set(CMAKE_CXX_STANDARD 11)
 #-ftree-vectorize
 
 # mpi or not
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHAVE_MPI -DMPICH_IGNORE_CXX_SEEK -DPRINT_OUTPUT_FILES=0")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHAVE_MPI -DMPICH_IGNORE_CXX_SEEK")
 
-# fast math or not
+# print output to console and files
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DPRINT_OUTPUT=0")
+
+# fast math or not, there is a problem when nan values are found when this options is enabled
 # set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffast-math")
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -funroll-all-loops") #just for gcc
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DMINIXYCE_INFO=1 -DPRINT_OUTPUT=0")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DMINIXYCE_INFO=1")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DAPPROACH_USING_POINTERS=0")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DAPPROACH_ALREADY_CONSUMED=0")
 

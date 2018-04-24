@@ -79,6 +79,7 @@ int main(int argc, char* argv[]) {
     int p = 1, pid = 0, n = 0, replicated = 0;
     int producerCore = 0, consumerCore = 2, numThreads = 2;
     char * basePath;
+    int numRuns = 1;
 
 #ifdef HAVE_MPI
     MPI_Init(&argc, &argv);
@@ -87,21 +88,37 @@ int main(int argc, char* argv[]) {
     MPI_Comm_rank(MPI_COMM_WORLD, &pid);
 #endif
 
-    //dperez, example of execution: -c tests/cir1.net /home/diego/Documents/workspace/miniXyce_RHT/cmake-build-debug 2 0 1
-    if(argc > 5) {
+    // params for either normal or replicated execution
+    if(argc > 4) {
+        basePath = argv[3];
+        numRuns = atoi(argv[4]);
+        printf("\n-------- Will execute %d times the ", numRuns);
+    }
+
+    //params just for replicated execution
+    if(argc > 6) {
         replicated = 1;
-        numThreads = atoi(argv[4]);
+        numThreads = atoi(argv[5]);
 
         producerCore = atoi(argv[pid * 2 + 5]);
         consumerCore = atoi(argv[pid * 2 + 6]);
 
-        argc -= (numThreads + 2);
+        argc -= (numThreads + 3); // basepath, numRuns, numThreads and the thread list
+        printf("Replicated");
     }else{
-        argc--; // just the base path
+        argc -= 2; // basepath, numRuns
+        printf("Non-Replicated");
     }
 
-    //Notreplicated:  -c tests/cir1.net /home/diego/Documents/workspace/miniXyce_RHT/cmake-build-debug
-    basePath = argv[3];
+    printf(" version --------\n");
+
+#if DPRINT_OUTPUT == 0
+    printf(" The print output has been disabled, check CMakeList.txt to switch on/off options\n\n");
+#else
+    printf(" The print output is enabled, check CMakeList.txt to switch on/off options\n\n");
+#endif
+
+    // calculates the path of defaultParams and lastUsedParams files
     sprintf(DEFAULT_PARAMS_FILE_PATH, "%s/%s", basePath, DEFAULT_PARAMS_FILE_NAME);
     sprintf(LAST_USED_PARAMS_FILE_PATH, "%s/%s", basePath, LAST_USED_PARAMS_FILE_NAME);
 
@@ -109,7 +126,7 @@ int main(int argc, char* argv[]) {
     double times = 0, currentElapsed;
 
     if (!replicated) {
-        for (int iterator = 0; iterator < TEST_NUM_RUNS; iterator++) {
+        for (int iterator = 0; iterator < numRuns; iterator++) {
 
             currentElapsed = main_execution(p, pid, n, argc, argv);
 
@@ -122,7 +139,7 @@ int main(int argc, char* argv[]) {
 
         if(pid == 0) {
             printf("\n -------- Summary Baseline ----------- \n");
-            printf("Mean time in seconds: %f \n\n", times / TEST_NUM_RUNS);
+            printf("Mean time in seconds: %f \n\n", times / numRuns);
         }
 
     } else {
@@ -130,7 +147,7 @@ int main(int argc, char* argv[]) {
 
         ConsumerParams *consumerParams;
 
-        for (int iterator = 0; iterator < TEST_NUM_RUNS; iterator++) {
+        for (int iterator = 0; iterator < numRuns; iterator++) {
             RHT_Replication_Init(numThreads);
             consumerParams = new ConsumerParams();
 
@@ -169,7 +186,7 @@ int main(int argc, char* argv[]) {
 
         if(pid == 0) {
             printf("\n -------- Summary Replicated ----------- \n");
-            printf("Mean time in seconds: %f \n\n", times / TEST_NUM_RUNS);
+            printf("Mean time in seconds: %f \n\n", times / numRuns);
         }
 
 #ifdef HAVE_MPI

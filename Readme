@@ -14,10 +14,10 @@ mpirun -np 2 miniXyceRHT -c "$PWD"/tests/cirHuge.net "$PWD"
 mpirun -np 4 miniXyceRHT -c "$PWD"/tests/cirHuge.net "$PWD"
 
 # to test replicated versions
-mpirun -np 1 miniXyceRHT -c "$PWD"/tests/cirHuge.net "$PWD" 2 0 2
-mpirun -np 1 miniXyceRHT -c "$PWD"/tests/cirHuge.net "$PWD" 2 0 1
-mpirun -np 2 miniXyceRHT -c "$PWD"/tests/cirHuge.net "$PWD" 4 0 1 2 3
-mpirun -np 2 miniXyceRHT -c "$PWD"/tests/cirHuge.net "$PWD" 4 0 2 1 3
+mpirun -np 1 miniXyceRHT -c "$PWD"/tests/cirHuge.net "$PWD" 5 2 0 2
+mpirun -np 1 miniXyceRHT -c "$PWD"/tests/cirHuge.net "$PWD" 5 2 0 1
+mpirun -np 2 miniXyceRHT -c "$PWD"/tests/cirHuge.net "$PWD" 5 4 0 1 2 3
+mpirun -np 2 miniXyceRHT -c "$PWD"/tests/cirHuge.net "$PWD" 5 4 0 2 1 3
 
 # the args are the following:
     -c,                         a param of miniXyce app, it indicates that is going to use a test file
@@ -26,13 +26,14 @@ mpirun -np 2 miniXyceRHT -c "$PWD"/tests/cirHuge.net "$PWD" 4 0 2 1 3
                                 tests/ folder.
     "$PWD",                     is the current directoy, which is needed to locate the files
                                 default_params.txt and last_used_params.txt which are necessary.
+    numRuns,                    number of executions, used to calculate the mean exec time
     numThreads,                 the number of threads that will be needed. Should be mpi -np ranks x 2
     threadList,                 the number of logical cores where the threads will be pinned.
 
 # So for example:
-mpirun -np 2 miniXyceRHT -c "$PWD"/tests/cirHuge.net "$PWD" 4 0 2 1 3
+mpirun -np 2 miniXyceRHT -c "$PWD"/tests/cirHuge.net "$PWD" 5 4 0 2 1 3
 
-Excecutes 2 ranks of mpi, the test file is cirHuge.net, there will be 4 threads (consumer, producer in
+Excecutes 2 ranks of mpi, 5 times, the test file is cirHuge.net, there will be 4 threads (consumer, producer in
 each rank). Producer1 will be pinned to core 0, Consumer1 will be pinned to core 2, Producer2 will be
 pinned to core 1 and Consumer2 will be pinned to core 3.
 
