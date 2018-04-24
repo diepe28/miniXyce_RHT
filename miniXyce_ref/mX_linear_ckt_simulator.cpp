@@ -68,11 +68,11 @@ typedef struct {
 
 void consumer_thread_func(void * args);
 
-void main_execution_replicated(int p, int pid, int n, int argc, char* argv[]);
+double main_execution_replicated(int p, int pid, int n, int argc, char* argv[]);
 
-void main_execution(int p, int pid, int n, int argc, char* argv[]);
+double main_execution(int p, int pid, int n, int argc, char* argv[]);
 
-//dperez, todo remove the constant part of the execution from the time measurement. Just leave the replicated part.
+//perl RC_ladder.pl 5000 > cirHuge.net
 
 int main(int argc, char* argv[]) {
     // this is of course, the actual transient simulator
@@ -90,38 +90,32 @@ int main(int argc, char* argv[]) {
     //dperez, example of execution: -c tests/cir1.net /home/diego/Documents/workspace/miniXyce_RHT/cmake-build-debug 2 0 1
     if(argc > 5) {
         replicated = 1;
-        basePath = argv[3];
         numThreads = atoi(argv[4]);
-
-        sprintf(DEFAULT_PARAMS_FILE_PATH, "%s/%s", basePath, DEFAULT_PARAMS_FILE_NAME);
-        sprintf(LAST_USED_PARAMS_FILE_PATH, "%s/%s", basePath, LAST_USED_PARAMS_FILE_NAME);
 
         producerCore = atoi(argv[pid * 2 + 5]);
         consumerCore = atoi(argv[pid * 2 + 6]);
 
         argc -= (numThreads + 2);
+    }else{
+        argc--; // just the base path
     }
 
+    //Notreplicated:  -c tests/cir1.net /home/diego/Documents/workspace/miniXyce_RHT/cmake-build-debug
+    basePath = argv[3];
+    sprintf(DEFAULT_PARAMS_FILE_PATH, "%s/%s", basePath, DEFAULT_PARAMS_FILE_NAME);
+    sprintf(LAST_USED_PARAMS_FILE_PATH, "%s/%s", basePath, LAST_USED_PARAMS_FILE_NAME);
+
     // initialize the simulation parameters
-    double times = 0;
-    struct timespec start, finish;
-    double elapsed;
+    double times = 0, currentElapsed;
 
     if (!replicated) {
         for (int iterator = 0; iterator < TEST_NUM_RUNS; iterator++) {
 
-            clock_gettime(CLOCK_MONOTONIC, &start);
-            {
-                main_execution(p, pid, n, argc, argv);
-            }
-            clock_gettime(CLOCK_MONOTONIC, &finish);
-
-            elapsed = (finish.tv_sec - start.tv_sec);
-            elapsed += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
+            currentElapsed = main_execution(p, pid, n, argc, argv);
 
             if(pid == 0) {
-                printf("\nActual Walltime in seconds: %f \n ", elapsed);
-                times += elapsed;
+                printf("Actual Walltime in seconds: %f \n ", currentElapsed);
+                times += currentElapsed;
                 printf("\n-----------------\n\n");
             }
         }
@@ -149,30 +143,21 @@ int main(int argc, char* argv[]) {
 
             pthread_t myThread;
 
-            int err = pthread_create(&myThread, NULL, (void *(*)(void *)) consumer_thread_func, (void *) consumerParams);
+            int err = pthread_create(&myThread, NULL, (void *(*)(void *)) consumer_thread_func,
+                                     (void *) consumerParams);
 
             if (err) {
                 fprintf(stderr, "Fail creating thread %d\n", 1);
                 exit(1);
             }
 
-            if(pid == 0) {
-                clock_gettime(CLOCK_MONOTONIC, &start);
-                {
-                    main_execution_replicated(p, pid, n, argc, argv);
-                    pthread_join(myThread, NULL);
-                }
-                clock_gettime(CLOCK_MONOTONIC, &finish);
+            currentElapsed = main_execution_replicated(p, pid, n, argc, argv);
+            pthread_join(myThread, NULL);
 
-                elapsed = (finish.tv_sec - start.tv_sec);
-                elapsed += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
-
-                printf("\nActual Walltime in seconds: %f \n ", elapsed);
-                times += elapsed;
+            if (pid == 0) {
+                printf("Actual Walltime in seconds: %f \n ", currentElapsed);
+                times += currentElapsed;
                 printf("\n-----------------\n\n");
-            }else{
-                main_execution_replicated(p, pid, n, argc, argv);
-                pthread_join(myThread, NULL);
             }
 
             // params that need to be reset each time
@@ -200,9 +185,10 @@ int main(int argc, char* argv[]) {
     return 0;
 }
 
-void main_execution(int p, int pid, int n, int argc, char* argv[]) {
+double main_execution(int p, int pid, int n, int argc, char* argv[]) {
 
-    double sim_start = mX_timer();
+    double sim_start = mX_timer(), elapsedExe = 0;
+    struct timespec startExe, endExe;
 
     // initialize the simulation parameters
     std::string ckt_netlist_filename;
@@ -229,6 +215,11 @@ void main_execution(int p, int pid, int n, int argc, char* argv[]) {
 
     mX_linear_DAE *dae = parse_netlist(ckt_netlist_filename, p, pid, n, num_internal_nodes, num_voltage_sources,
                         num_current_sources, num_resistors, num_capacitors, num_inductors);
+
+    //dperez, here is where the timer of the actual replicated execution starts...
+    if(pid == 0) {
+        clock_gettime(CLOCK_MONOTONIC, &startExe);
+    }
 
     tend = mX_timer() - tstart;
     doc.add("Netlist_parsing_time", tend);
@@ -472,12 +463,23 @@ void main_execution(int p, int pid, int n, int argc, char* argv[]) {
 #endif
     }
 
+    //dperez, this is where the replicated execution ends
+    if(pid == 0) {
+        clock_gettime(CLOCK_MONOTONIC, &endExe);
+
+        elapsedExe = (endExe.tv_sec - startExe.tv_sec);
+        elapsedExe += (endExe.tv_nsec - startExe.tv_nsec) / 1000000000.0;
+    }
+
     // Clean up
     mX_linear_DAE_utils::destroy(dae);
+
+    return elapsedExe;
 }
 
-void main_execution_replicated(int p, int pid, int n, int argc, char* argv[]) {
-    double sim_start = mX_timer();
+double main_execution_replicated(int p, int pid, int n, int argc, char* argv[]) {
+    double sim_start = mX_timer(), elapsedExe = 0;
+    struct timespec startExe, endExe;
 
     // initialize the simulation parameters
     std::string ckt_netlist_filename;
@@ -503,6 +505,11 @@ void main_execution_replicated(int p, int pid, int n, int argc, char* argv[]) {
 
     mX_linear_DAE *dae = parse_netlist(ckt_netlist_filename, p, pid, n, num_internal_nodes, num_voltage_sources,
                                        num_current_sources, num_resistors, num_capacitors, num_inductors);
+
+    //dperez, here is where the timer of the actual replicated execution starts...
+    if(pid == 0) {
+        clock_gettime(CLOCK_MONOTONIC, &startExe);
+    }
 
     tend = mX_timer() - tstart;
     doc.add("Netlist_parsing_time", tend);
@@ -832,8 +839,18 @@ void main_execution_replicated(int p, int pid, int n, int argc, char* argv[]) {
 #endif
     }
 
+    //dperez, this is where the replicated execution ends
+    if(pid == 0) {
+        clock_gettime(CLOCK_MONOTONIC, &endExe);
+
+        elapsedExe = (endExe.tv_sec - startExe.tv_sec);
+        elapsedExe += (endExe.tv_nsec - startExe.tv_nsec) / 1000000000.0;
+    }
+
     // Clean up
     mX_linear_DAE_utils::destroy(dae);
+
+    return elapsedExe;
 }
 
 void consumer_thread_func(void *args) {
