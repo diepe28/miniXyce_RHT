@@ -1,7 +1,39 @@
-To compile execute the following commands
+# To compile execute the following commands:
 
     cd cmake-build-debug/
     cmake ..
     make
 
-Thats it!
+# Thats it!
+
+$ Examples of execution:
+
+# to see how it scales with HT
+mpirun -np 1 miniXyceRHT -c "$PWD"/tests/cirHuge.net "$PWD"
+mpirun -np 2 miniXyceRHT -c "$PWD"/tests/cirHuge.net "$PWD"
+mpirun -np 4 miniXyceRHT -c "$PWD"/tests/cirHuge.net "$PWD"
+
+# to test replicated versions
+mpirun -np 1 miniXyceRHT -c "$PWD"/tests/cirHuge.net "$PWD" 2 0 2
+mpirun -np 1 miniXyceRHT -c "$PWD"/tests/cirHuge.net "$PWD" 2 0 1
+mpirun -np 2 miniXyceRHT -c "$PWD"/tests/cirHuge.net "$PWD" 4 0 1 2 3
+mpirun -np 2 miniXyceRHT -c "$PWD"/tests/cirHuge.net "$PWD" 4 0 2 1 3
+
+# the args are the following:
+    -c,                         a param of miniXyce app, it indicates that is going to use a test file
+    "$PWD"/tests/cirHuge.net,   the path to the test file where the circuit is described.
+                                The "$PWD" executes the pwd command. There are other test files in the
+                                tests/ folder.
+    "$PWD",                     is the current directoy, which is needed to locate the files
+                                default_params.txt and last_used_params.txt which are necessary.
+    numThreads,                 the number of threads that will be needed. Should be mpi -np ranks x 2
+    threadList,                 the number of logical cores where the threads will be pinned.
+
+# So for example:
+mpirun -np 2 miniXyceRHT -c "$PWD"/tests/cirHuge.net "$PWD" 4 0 2 1 3
+
+Excecutes 2 ranks of mpi, the test file is cirHuge.net, there will be 4 threads (consumer, producer in
+each rank). Producer1 will be pinned to core 0, Consumer1 will be pinned to core 2, Producer2 will be
+pinned to core 1 and Consumer2 will be pinned to core 3.
+
+Depending on the order of cores, the replicas will be pinned to hyper-threads or not.
