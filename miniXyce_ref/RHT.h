@@ -25,7 +25,7 @@
 #define RHT_QUEUE_SIZE 512 // > 512 make no real diff
 #define MIN_PTR_DIST 200 // > 200 makes no real diff
 #define ALREADY_CONSUMED -251802.89123
-#define GROUP_GRANULARITY 8
+#define GROUP_GRANULARITY 4
 #define INLINE inline __attribute__((always_inline))
 #define EPSILON 0.000001
 #define fequal(a,b) (fabs(a-b) < EPSILON)

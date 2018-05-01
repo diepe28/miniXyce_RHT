@@ -31,14 +31,15 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DBRANCH_HINT=1") # should always be tru
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DCOUNT_QUEUE_DESYNC=0")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DAPPROACH_NEW_ENQ_INDEX=0") # use with APPROACH_NEW_LIMIT
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DPERCENTAGE_OF_REPLICATION=0") # use with APPROACH_NEW_LIMIT
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DPERCENTAGE_OF_REPLICATION=0")
 
+# Modify this flags to test different approaches
 set(FLAGS_CURRENT "")
 set(FLAGS_CURRENT "${FLAGS_CURRENT} -DAPPROACH_USING_POINTERS=0")
-set(FLAGS_CURRENT "${FLAGS_CURRENT} -DAPPROACH_ALREADY_CONSUMED=0")
-set(FLAGS_CURRENT "${FLAGS_CURRENT} -DAPPROACH_NEW_LIMIT=1")
+set(FLAGS_CURRENT "${FLAGS_CURRENT} -DAPPROACH_ALREADY_CONSUMED=1")
+set(FLAGS_CURRENT "${FLAGS_CURRENT} -DAPPROACH_NEW_LIMIT=0")
 set(FLAGS_CURRENT "${FLAGS_CURRENT} -DAPPROACH_WRITE_INVERTED_NEW_LIMIT=0")
-set(FLAGS_CURRENT "${FLAGS_CURRENT} -DVAR_GROUPING=0")
+set(FLAGS_CURRENT "${FLAGS_CURRENT} -DVAR_GROUPING=1")
 
 
 set(SOURCE_FILES
@@ -99,19 +100,20 @@ set(FLAGS_NEW_LIMIT_VG " ${FLAGS_NEW_LIMIT} -DVAR_GROUPING=1")
 set(FLAGS_NEW_LIMIT_INVERTED "-DAPPROACH_WRITE_INVERTED_NEW_LIMIT=1")
 set(FLAGS_NEW_LIMIT_INVERTED_VG " ${FLAGS_NEW_LIMIT_INVERTED} -DVAR_GROUPING=1")
 
+# un comment the next lines to create multiple executables, with different configurations
 #using pointers
-createExecutable("miniXyce-UP" ${FLAGS_USING_POINTERS})
-createExecutable("miniXyce-UP-VG" ${FLAGS_USING_POINTERS_VG})
+#createExecutable("miniXyce-UP" ${FLAGS_USING_POINTERS})
+#createExecutable("miniXyce-UP-VG" ${FLAGS_USING_POINTERS_VG})
 
 # already consumed
-createExecutable("miniXyce-AC" ${FLAGS_ALREADY_CONSUMED})
-createExecutable("miniXyce-AC-VG" ${FLAGS_ALREADY_CONSUMED_VG})
+#createExecutable("miniXyce-AC" ${FLAGS_ALREADY_CONSUMED})
+#createExecutable("miniXyce-AC-VG" ${FLAGS_ALREADY_CONSUMED_VG})
 
 # new limit
-createExecutable("miniXyce-NL" ${FLAGS_NEW_LIMIT})
-createExecutable("miniXyce-NL-VG" ${FLAGS_NEW_LIMIT_VG})
+#createExecutable("miniXyce-NL" ${FLAGS_NEW_LIMIT})
+#createExecutable("miniXyce-NL-VG" ${FLAGS_NEW_LIMIT_VG})
 
 # new limit inverted
-createExecutable("miniXyce-NLI" ${FLAGS_NEW_LIMIT_INVERTED})
-createExecutable("miniXyce-NLI-VG" ${FLAGS_NEW_LIMIT_INVERTED_VG})
+#createExecutable("miniXyce-NLI" ${FLAGS_NEW_LIMIT_INVERTED})
+#createExecutable("miniXyce-NLI-VG" ${FLAGS_NEW_LIMIT_INVERTED_VG})
 

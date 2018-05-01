@@ -72,9 +72,14 @@ double main_execution_replicated(int p, int pid, int n, int argc, char* argv[]);
 
 double main_execution(int p, int pid, int n, int argc, char* argv[]);
 
+void stressTest_queue();
+
 //perl RC_ladder.pl 5000 > cirHuge.net
 
 int main(int argc, char* argv[]) {
+
+    //stressTest_queue();
+
     // this is of course, the actual transient simulator
     int p = 1, pid = 0, n = 0, replicated = 0;
     int producerCore = 0, consumerCore = 2, numThreads = 2;
@@ -175,8 +180,7 @@ int main(int argc, char* argv[]) {
 
             pthread_t myThread;
 
-            int err = pthread_create(&myThread, NULL, (void *(*)(void *)) consumer_thread_func,
-                                     (void *) consumerParams);
+            int err = pthread_create(&myThread, NULL, (void *(*)(void *)) consumer_thread_func, (void *) consumerParams);
 
             if (err) {
                 fprintf(stderr, "Fail creating thread %d\n", 1);
@@ -516,7 +520,7 @@ double main_execution_replicated(int p, int pid, int n, int argc, char* argv[]) 
 
 #if PERCENTAGE_OF_REPLICATION == 1
     double elapsedAll = 0;
-    struct startAll, endAll;
+    struct timespec startAll, endAll;
 
     //dperez, here is where the timer of the all execution starts...
     if(pid == 0) {
@@ -1115,3 +1119,92 @@ void consumer_thread_func(void *args) {
     mX_linear_DAE_utils::destroy(dae);
 }
 
+double test_execution_producer(int n, int producerCore) {
+
+    struct timespec startExe, endExe;
+    double elapsedExe, iterValue = 0, volatileValue, total = 0;
+    SetThreadAffinity(producerCore);
+
+    clock_gettime(CLOCK_MONOTONIC, &startExe);
+    {
+        for(int i = 0; i < n; i++) {
+            int j = 0;
+            replicate_loop_producer(0, n, j, j++, iterValue, iterValue = j * i)
+
+            if(i % 1000){
+                volatileValue = iterValue * i;
+                RHT_Produce_Volatile(volatileValue);
+                total += volatileValue;
+            }
+        }
+    }
+    clock_gettime(CLOCK_MONOTONIC, &endExe);
+
+    // To avoid compiler marking dead code
+    if(total < 0) {
+        fprintf(stderr, "Something about totall %d\n", total);
+    }
+
+    elapsedExe = (endExe.tv_sec - startExe.tv_sec);
+    elapsedExe += (endExe.tv_nsec - startExe.tv_nsec) / 1000000000.0;
+
+    return elapsedExe;
+}
+
+void test_execution_consumer(void * args) {
+    int *params = (int *) args;
+
+    int n = params[0];
+    int consumerCore = params[1];
+
+    double iterValue = 0, volatileValue, total = 0;
+    SetThreadAffinity(consumerCore);
+
+    for(int i = 0; i < n; i++) {
+        int j = 0;
+        replicate_loop_consumer(0, n, j, j++, iterValue, iterValue = j * i)
+
+        if(i % 1000){
+            volatileValue = iterValue * i;
+            RHT_Consume_Volatile(volatileValue);
+            total += volatileValue;
+        }
+    }
+
+    // To avoid compiler marking dead code
+    if(total < 0) {
+        fprintf(stderr, "Something about totall %d\n", total);
+    }
+}
+
+void stressTest_queue(){
+
+    int numTests = 5, problemSize = 30000, numThreads = 2, producerCore = 0, consumerCore = 2;
+    double currentElapsed = 0, meanTime = 0;
+    int consumerArgs[2];
+
+    consumerArgs[0] = problemSize;
+    consumerArgs[1] = consumerCore;
+
+    for(int i = 0; i < numTests; i++){
+        RHT_Replication_Init(numThreads);
+
+        pthread_t myThread;
+
+        int err = pthread_create(&myThread, NULL, (void *(*)(void *)) test_execution_consumer, (void *) consumerArgs);
+
+        if (err) {
+            fprintf(stderr, "Fail creating thread %d\n", 1);
+            exit(1);
+        }
+        currentElapsed = test_execution_producer(problemSize, producerCore);
+        pthread_join(myThread, NULL);
+
+        printf("Exec[%i]: %f\n", i, currentElapsed);
+        meanTime += currentElapsed;
+    }
+
+    printf("----- Mean time: %f ---- \n\n", meanTime/numTests);
+
+    exit(0);
+}
