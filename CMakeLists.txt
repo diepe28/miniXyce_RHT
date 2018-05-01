@@ -24,18 +24,18 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DPRINT_OUTPUT=0")
 # fast math or not, there is a problem when nan values are found when this options is enabled
 # set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffast-math")
 
+# General compilation flags
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -funroll-all-loops") #just for gcc
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DMINIXYCE_INFO=1")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DAPPROACH_USING_POINTERS=0")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DAPPROACH_ALREADY_CONSUMED=0")
-
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DAPPROACH_NEW_LIMIT=1")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DAPPROACH_WRITE_INVERTED_NEW_LIMIT=0")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DAPPROACH_NEW_ENQ_INDEX=0") # use with APPROACH_NEW_LIMIT
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DAPPROACH_MOODY_CAMEL=0")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DCOUNT_QUEUE_DESYNC=0")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DBRANCH_HINT=1") # should always be true
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DVAR_GROUPING=1") #only works for new limit and write inverted new limit
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DCOUNT_QUEUE_DESYNC=0")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DAPPROACH_NEW_ENQ_INDEX=0") # use with APPROACH_NEW_LIMIT
+
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DAPPROACH_USING_POINTERS=1")
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DAPPROACH_ALREADY_CONSUMED=0")
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DAPPROACH_NEW_LIMIT=0")
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DAPPROACH_WRITE_INVERTED_NEW_LIMIT=0")
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DVAR_GROUPING=1")
 
 set(SOURCE_FILES
         miniXyce_ref/mX_source.cpp
@@ -59,20 +59,50 @@ set(SOURCE_FILES
         miniXyce_ref/RHT.h
         )
 
-add_executable(miniXyceRHT ${SOURCE_FILES})
+function(createExecutable exeName compFlags)
+    add_executable(${exeName} ${SOURCE_FILES})
+    set_target_properties(${exeName} PROPERTIES COMPILE_FLAGS "${compFlags}")
+    target_link_libraries(${exeName} ${MPI_LIBRARIES})
+    target_link_libraries(${exeName} pthread)
+    target_link_libraries(${exeName} m) #math
+    if(MPI_COMPILE_FLAGS)
+        set_target_properties(${exeName} PROPERTIES COMPILE_FLAGS "${MPI_COMPILE_FLAGS}")
+    endif()
 
-target_link_libraries(miniXyceRHT ${MPI_LIBRARIES})
+    if(MPI_LINK_FLAGS)
+        set_target_properties(${exeName} PROPERTIES LINK_FLAGS "${MPI_LINK_FLAGS}")
+    endif()
+endfunction(createExecutable)
 
-target_link_libraries(miniXyceRHT pthread)
+# using pointer flags
+set(FLAGS_USING_POINTERS "-DAPPROACH_USING_POINTERS=1")
+set(FLAGS_USING_POINTERS_VG " ${FLAGS_USING_POINTERS} -DVAR_GROUPING=1")
 
-target_link_libraries(miniXyceRHT m) #math
+# using already consumed value flags
+set(FLAGS_ALREADY_CONSUMED "-DAPPROACH_ALREADY_CONSUMED=1")
+set(FLAGS_ALREADY_CONSUMED_VG " ${FLAGS_ALREADY_CONSUMED} -DVAR_GROUPING=1")
 
-if(MPI_COMPILE_FLAGS)
-    set_target_properties(miniXyceRHT PROPERTIES
-            COMPILE_FLAGS "${MPI_COMPILE_FLAGS}")
-endif()
+# using new limit approach
+set(FLAGS_NEW_LIMIT "-DAPPROACH_NEW_LIMIT=1")
+set(FLAGS_NEW_LIMIT_VG " ${FLAGS_NEW_LIMIT} -DVAR_GROUPING=1")
 
-if(MPI_LINK_FLAGS)
-    set_target_properties(miniXyceRHT PROPERTIES
-            LINK_FLAGS "${MPI_LINK_FLAGS}")
-endif()
+# using new limit write inverted approach
+set(FLAGS_NEW_LIMIT_INVERTED "-DAPPROACH_WRITE_INVERTED_NEW_LIMIT=1")
+set(FLAGS_NEW_LIMIT_INVERTED_VG " ${FLAGS_NEW_LIMIT_INVERTED} -DVAR_GROUPING=1")
+
+#using pointers
+createExecutable("miniXyce-UP" ${FLAGS_USING_POINTERS})
+createExecutable("miniXyce-UP-VG" ${FLAGS_USING_POINTERS_VG})
+
+# already consumed
+createExecutable("miniXyce-AC" ${FLAGS_ALREADY_CONSUMED})
+createExecutable("miniXyce-AC-VG" ${FLAGS_ALREADY_CONSUMED_VG})
+
+# new limit
+createExecutable("miniXyce-NL" ${FLAGS_NEW_LIMIT})
+createExecutable("miniXyce-NL-VG" ${FLAGS_NEW_LIMIT_VG})
+
+# new limit inverted
+createExecutable("miniXyce-NLI" ${FLAGS_NEW_LIMIT_INVERTED})
+createExecutable("miniXyce-NLI-VG" ${FLAGS_NEW_LIMIT_INVERTED_VG})
+

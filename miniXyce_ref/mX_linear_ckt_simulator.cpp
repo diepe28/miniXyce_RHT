@@ -92,7 +92,7 @@ int main(int argc, char* argv[]) {
     if(argc > 4) {
         basePath = argv[3];
         numRuns = atoi(argv[4]);
-        printf("\n-------- Will execute %d times the ", numRuns);
+        if(pid == 0) printf("\n-------- Will execute %d times the ", numRuns);
     }
 
     //params just for replicated execution
@@ -100,22 +100,38 @@ int main(int argc, char* argv[]) {
         replicated = 1;
         numThreads = atoi(argv[5]);
 
-        producerCore = atoi(argv[pid * 2 + 5]);
-        consumerCore = atoi(argv[pid * 2 + 6]);
+        producerCore = atoi(argv[pid * 2 + 6]);
+        consumerCore = atoi(argv[pid * 2 + 7]);
 
         argc -= (numThreads + 3); // basepath, numRuns, numThreads and the thread list
-        printf("Replicated");
+        if(pid == 0) printf("Replicated");
     }else{
         argc -= 2; // basepath, numRuns
-        printf("Non-Replicated");
+        if(pid == 0) printf("Non-Replicated");
     }
 
-    printf(" version --------\n");
+    if(pid == 0 && replicated) {
+        printf("  version with %d ranks --- Approach: ", numThreads/2);
+#if APPROACH_USING_POINTERS == 1
+        printf("Enq/Deq Pointers");
+#elif APPROACH_ALREADY_CONSUMED == 1
+        printf("AlreadyConsumed value");
+#elif APPROACH_NEW_LIMIT == 1
+        printf("New limit");
+#elif APPROACH_WRITE_INVERTED_NEW_LIMIT == 1
+        printf("New limit write inverted");
+#endif
+
+#if VAR_GROUPING == 1
+        printf(" -- With var grouping of %d: ", GROUP_GRANULARITY);
+#endif
+    }
+
 
 #if DPRINT_OUTPUT == 0
-    printf(" The print output has been disabled, check CMakeList.txt to switch on/off options\n\n");
+    if(pid == 0) printf("\nThe print output has been disabled, check CMakeList.txt to switch on/off options\n\n");
 #else
-    printf(" The print output is enabled, check CMakeList.txt to switch on/off options\n\n");
+    if(pid == 0) printf("\nThe print output is enabled, check CMakeList.txt to switch on/off options\n\n");
 #endif
 
     // calculates the path of defaultParams and lastUsedParams files
@@ -131,9 +147,8 @@ int main(int argc, char* argv[]) {
             currentElapsed = main_execution(p, pid, n, argc, argv);
 
             if(pid == 0) {
-                printf("Actual Walltime in seconds: %f \n ", currentElapsed);
+                printf("Actual Walltime[%d] in seconds: %f \n", iterator, currentElapsed);
                 times += currentElapsed;
-                printf("\n-----------------\n\n");
             }
         }
 
@@ -172,9 +187,8 @@ int main(int argc, char* argv[]) {
             pthread_join(myThread, NULL);
 
             if (pid == 0) {
-                printf("Actual Walltime in seconds: %f \n ", currentElapsed);
+                printf("Actual Walltime[%d] in seconds: %f \n", iterator,  currentElapsed);
                 times += currentElapsed;
-                printf("\n-----------------\n\n");
             }
 
             // params that need to be reset each time
