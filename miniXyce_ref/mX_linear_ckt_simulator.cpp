@@ -219,7 +219,7 @@ int main(int argc, char* argv[]) {
 double main_execution(int p, int pid, int n, int argc, char* argv[]) {
 
     double sim_start = mX_timer(), elapsedExe = 0;
-    struct timespec startExe, endExe;
+    struct timespec startExe, endExe, startAll;
 
     // initialize the simulation parameters
     std::string ckt_netlist_filename;
@@ -231,6 +231,8 @@ double main_execution(int p, int pid, int n, int argc, char* argv[]) {
     double tstart, tend;
     int num_internal_nodes, num_voltage_sources, num_inductors;
     int num_current_sources = 0, num_resistors = 0, num_capacitors = 0;
+
+
 
     // initialize YAML doc
     YAML_Doc doc("miniXyce", "1.0");
@@ -511,6 +513,16 @@ double main_execution(int p, int pid, int n, int argc, char* argv[]) {
 double main_execution_replicated(int p, int pid, int n, int argc, char* argv[]) {
     double sim_start = mX_timer(), elapsedExe = 0;
     struct timespec startExe, endExe;
+
+#if PERCENTAGE_OF_REPLICATION == 1
+    double elapsedAll = 0;
+    struct startAll, endAll;
+
+    //dperez, here is where the timer of the all execution starts...
+    if(pid == 0) {
+        clock_gettime(CLOCK_MONOTONIC, &startAll);
+    }
+#endif
 
     // initialize the simulation parameters
     std::string ckt_netlist_filename;
@@ -881,6 +893,17 @@ double main_execution_replicated(int p, int pid, int n, int argc, char* argv[]) 
     // Clean up
     mX_linear_DAE_utils::destroy(dae);
 
+#if PERCENTAGE_OF_REPLICATION == 1
+    //dperez, this is where all execution ends
+    if(pid == 0) {
+        clock_gettime(CLOCK_MONOTONIC, &endAll);
+
+        elapsedAll = (endAll.tv_sec - startAll.tv_sec);
+        elapsedAll += (endAll.tv_nsec - startAll.tv_nsec) / 1000000000.0;
+
+        printf("The replication is %.5f %% of all the execution\n", elapsedExe / elapsedAll);
+    }
+#endif
     return elapsedExe;
 }
 
