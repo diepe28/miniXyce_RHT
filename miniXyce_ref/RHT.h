@@ -25,7 +25,7 @@
 #define RHT_QUEUE_SIZE 512 // > 512 make no real diff
 #define MIN_PTR_DIST 200 // > 200 makes no real diff
 #define ALREADY_CONSUMED -251802.89123
-#define GROUP_GRANULARITY 4
+#define GROUP_GRANULARITY 8
 #define INLINE inline __attribute__((always_inline))
 #define EPSILON 0.000001
 #define fequal(a,b) (fabs(a-b) < EPSILON)
@@ -84,9 +84,12 @@ static int are_both_nan(double pValue, double cValue){
 /// allocates more memory
 
 #define calc_new_distance(waitValue)                                            \
+    waitValue = (RHT_QUEUE_SIZE-(globalQueue.enqPtr+1) + globalQueue.deqPtr) % RHT_QUEUE_SIZE -1;
+
+#define calc_new_distance1(waitValue)                                            \
     globalQueue.localDeq = globalQueue.deqPtr;                                  \
     waitValue = (globalQueue.enqPtr >= globalQueue.localDeq ?                   \
-                (RHT_QUEUE_SIZE - globalQueue.enqPtr) + globalQueue.localDeq:   \
+                RHT_QUEUE_SIZE - globalQueue.enqPtr + globalQueue.localDeq:   \
                 globalQueue.localDeq - globalQueue.enqPtr)-1;
 
 #define write_move_normal(value)                                        \
@@ -101,11 +104,11 @@ static int are_both_nan(double pValue, double cValue){
     globalQueue.enqPtr = globalQueue.nextEnq;
 
 #if APPROACH_WRITE_INVERTED_NEW_LIMIT == 1
-    #define write_move(value) write_move_inverted(value)
+#define write_move(value) write_move_inverted(value)
 #elif APPROACH_USING_POINTERS == 1 || APPROACH_ALREADY_CONSUMED == 1
-    #define write_move(value) RHT_Produce_Secure(value);
+#define write_move(value) RHT_Produce_Secure(value);
 #else
-    #define write_move(value) write_move_normal(value)
+#define write_move(value) write_move_normal(value)
 #endif
 
 #if VAR_GROUPING == 1
@@ -281,7 +284,7 @@ static void createConsumerThreads(int numThreads) {
     //consumerThreads = (pthread_t **) malloc(sizeof(pthread_t *) * consumerThreadCount);
 
     //for (i = 0; i < consumerThreadCount; i++)
-        //consumerThreads[i] = (pthread_t *) malloc(sizeof(pthread_t));
+    //consumerThreads[i] = (pthread_t *) malloc(sizeof(pthread_t));
 }
 
 static void RHT_Replication_Init(int numThreads) {
