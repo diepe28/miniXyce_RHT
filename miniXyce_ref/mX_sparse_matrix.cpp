@@ -288,7 +288,7 @@ void mX_matrix_utils::distributed_sparse_matrix_add_to_producer(distributed_spar
         /*-- RHT -- */ RHT_Produce_Secure(mid_start_row);
         /*-- RHT -- */ RHT_Produce_Secure(mid_end_row);
 
-        //maybe we can convert this loop into our scheme
+        //dperez, maybe we can convert this loop into our scheme
         while (!pid_found) {
             if (row_idx < mid_start_row) {
                 end_pid = mid_pid - 1;
@@ -648,6 +648,11 @@ void mX_matrix_utils::sparse_matrix_vector_product_producer(distributed_sparse_m
     std::map<int, double> x_vec_entries;
     std::map<int, double>::iterator it3;
 
+//#if VAR_GROUPING == 1
+//    groupVarProducer = 0;
+//    int j = 0;
+//#endif
+
     for (int i = start_row; i <= end_row; i++) {
         // compute the mat_vec product for the i'th row
 
@@ -658,11 +663,9 @@ void mX_matrix_utils::sparse_matrix_vector_product_producer(distributed_sparse_m
         }
 
         distributed_sparse_matrix_entry *curr = A->row_headers[i - start_row];
-
         //todo, dperez make while faster
         while (curr) {
             int col_idx = curr->column;
-
             // aha, this processor has the correct x_vec entry locally
             if ((col_idx >= start_row) && (col_idx <= end_row)) {
                 y[i - start_row] += (curr->value) * x[col_idx - start_row];
@@ -695,10 +698,23 @@ void mX_matrix_utils::sparse_matrix_vector_product_producer(distributed_sparse_m
                 }
             }
 #endif
+
+//#if VAR_GROUPING == 1
+//            groupVarProducer += y[i - start_row];
+//            if (++j % GROUP_GRANULARITY == 0) {
+//                RHT_Produce_Secure(groupVarProducer);
+//                groupVarProducer = 0;
+//            }
+//#else
             /*-- RHT -- */ RHT_Produce_Secure(y[i - start_row]);
+//#endif
             curr = curr->next_in_row;
         }
     }
+//#if VAR_GROUPING == 1
+//        if (j % GROUP_GRANULARITY)
+//            RHT_Produce_Secure(groupVarProducer);
+//#endif
 }
 
 void mX_matrix_utils::sparse_matrix_vector_product_consumer(distributed_sparse_matrix* A, std::vector<double> &x, std::vector<double> &y) {
@@ -733,6 +749,11 @@ void mX_matrix_utils::sparse_matrix_vector_product_consumer(distributed_sparse_m
 
     std::map<int, double> x_vec_entries;
     std::map<int, double>::iterator it3;
+
+//#if VAR_GROUPING == 1
+//    groupVarConsumer = 0;
+//    int j = 0;
+//#endif
 
     //dperez, todo, replicate this loop in our scheme
     for (int i = start_row; i <= end_row; i++) {
@@ -781,10 +802,22 @@ void mX_matrix_utils::sparse_matrix_vector_product_consumer(distributed_sparse_m
                 }
             }
 #endif
+//#if VAR_GROUPING == 1
+//            groupVarConsumer += y[i - start_row];
+//            if (++j % GROUP_GRANULARITY == 0) {
+//                RHT_Consume_Check(groupVarConsumer);
+//                groupVarConsumer =  0;
+//            }
+//#else
             /*-- RHT -- */ RHT_Consume_Check(y[i - start_row]);
+//#endif
             curr = curr->next_in_row;
         }
     }
+//#if VAR_GROUPING == 1
+//    if (j % GROUP_GRANULARITY)
+//        RHT_Consume_Check(groupVarConsumer);
+//#endif
 }
 
 //////////////////// Norm /////////////////////////

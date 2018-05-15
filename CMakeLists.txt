@@ -39,7 +39,7 @@ set(FLAGS_CURRENT "${FLAGS_CURRENT} -DAPPROACH_USING_POINTERS=0")
 set(FLAGS_CURRENT "${FLAGS_CURRENT} -DAPPROACH_ALREADY_CONSUMED=1")
 set(FLAGS_CURRENT "${FLAGS_CURRENT} -DAPPROACH_NEW_LIMIT=0")
 set(FLAGS_CURRENT "${FLAGS_CURRENT} -DAPPROACH_WRITE_INVERTED_NEW_LIMIT=0")
-set(FLAGS_CURRENT "${FLAGS_CURRENT} -DVAR_GROUPING=1") # it can be used with any of the below approaches
+set(FLAGS_CURRENT "${FLAGS_CURRENT} -DVAR_GROUPING=0") # it can be used with any of the below approaches
 
 
 set(SOURCE_FILES
@@ -82,7 +82,7 @@ endfunction(createExecutable)
 
 
 #current, for testing
-createExecutable("miniXyce-current" ${FLAGS_CURRENT})
+createExecutable("miniXyceRHT" ${FLAGS_CURRENT})
 
 # using pointer flags
 set(FLAGS_USING_POINTERS "-DAPPROACH_USING_POINTERS=1")
@@ -106,7 +106,7 @@ set(FLAGS_NEW_LIMIT_INVERTED_VG " ${FLAGS_NEW_LIMIT_INVERTED} -DVAR_GROUPING=1")
 #createExecutable("miniXyce-UP-VG" ${FLAGS_USING_POINTERS_VG})
 
 # already consumed
-#createExecutable("miniXyce-AC" ${FLAGS_ALREADY_CONSUMED})
+createExecutable("miniXyce-AC" ${FLAGS_ALREADY_CONSUMED})
 #createExecutable("miniXyce-AC-VG" ${FLAGS_ALREADY_CONSUMED_VG})
 
 # new limit
