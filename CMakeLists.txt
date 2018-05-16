@@ -48,25 +48,16 @@ set(FLAGS_CURRENT "${FLAGS_CURRENT} -DVAR_GROUPING=1") # it can be used with any
 
 
 set(SOURCE_FILES
-        miniXyce_ref/mX_source.cpp
-        miniXyce_ref/mX_linear_ckt_simulator.cpp
+        miniXyce_ref/mX_source.cpp miniXyce_ref/mX_linear_ckt_simulator.cpp
         miniXyce_ref/mX_source.h
-        miniXyce_ref/mX_linear_DAE.cpp
-        miniXyce_ref/mX_linear_DAE.h
-        miniXyce_ref/mX_parms.cpp
-        miniXyce_ref/mX_parms.h
-        miniXyce_ref/mX_sparse_matrix.cpp
-        miniXyce_ref/mX_sparse_matrix.h
-        miniXyce_ref/mX_parser.cpp
-        miniXyce_ref/mX_parser.h
-        miniXyce_ref/YAML_Doc.cpp
-        miniXyce_ref/YAML_Doc.hpp
-        miniXyce_ref/YAML_Element.cpp
-        miniXyce_ref/YAML_Element.hpp
-        miniXyce_ref/mX_timer.cpp
-        miniXyce_ref/mX_timer.h
-        miniXyce_ref/RHT.cpp
-        miniXyce_ref/RHT.h
+        miniXyce_ref/mX_linear_DAE.cpp miniXyce_ref/mX_linear_DAE.h
+        miniXyce_ref/mX_parms.cpp miniXyce_ref/mX_parms.h
+        miniXyce_ref/mX_sparse_matrix.cpp miniXyce_ref/mX_sparse_matrix.h
+        miniXyce_ref/mX_parser.cpp miniXyce_ref/mX_parser.h
+        miniXyce_ref/YAML_Doc.cpp miniXyce_ref/YAML_Doc.hpp
+        miniXyce_ref/YAML_Element.cpp miniXyce_ref/YAML_Element.hpp
+        miniXyce_ref/mX_timer.cpp miniXyce_ref/mX_timer.h
+        miniXyce_ref/RHT.cpp miniXyce_ref/RHT.h
         )
 
 function(createExecutable exeName compFlags)
@@ -85,9 +76,8 @@ function(createExecutable exeName compFlags)
 endfunction(createExecutable)
 
 
-
 #current, for testing
-createExecutable("miniXyceRHT" ${FLAGS_CURRENT})
+#createExecutable("miniXyce-Current" ${FLAGS_CURRENT})
 
 # using pointer flags
 set(FLAGS_USING_POINTERS "-DAPPROACH_USING_POINTERS=1")
@@ -97,7 +87,15 @@ set(FLAGS_USING_POINTERS_VG " ${FLAGS_USING_POINTERS} -DVAR_GROUPING=1")
 set(FLAGS_ALREADY_CONSUMED "-DAPPROACH_ALREADY_CONSUMED=1")
 set(FLAGS_ALREADY_CONSUMED_VG " ${FLAGS_ALREADY_CONSUMED} -DVAR_GROUPING=1")
 
-# using new limit approach
+# using SRMT value flags
+set(FLAGS_SRMT "-DAPPROACH_SRMT=1")
+set(FLAGS_SRMT_VG " ${FLAGS_SRMT} -DVAR_GROUPING=1")
+
+# using no sync consumer approachh
+set(FLAGS_NO_SYNC_CONSUMER "-DAPPROACH_CONSUMER_NO_SYNC=1")
+set(FLAGS_NO_SYNC_CONSUMER_VG " ${FLAGS_NO_SYNC_CONSUMER} -DVAR_GROUPING=1")
+
+# using new limit approach (includes the previous)
 set(FLAGS_NEW_LIMIT "-DAPPROACH_NEW_LIMIT=1")
 set(FLAGS_NEW_LIMIT_VG " ${FLAGS_NEW_LIMIT} -DVAR_GROUPING=1")
 
@@ -114,6 +112,14 @@ set(FLAGS_NEW_LIMIT_INVERTED_VG " ${FLAGS_NEW_LIMIT_INVERTED} -DVAR_GROUPING=1")
 createExecutable("miniXyce-AC" ${FLAGS_ALREADY_CONSUMED})
 #createExecutable("miniXyce-AC-VG" ${FLAGS_ALREADY_CONSUMED_VG})
 
+# SRMT
+createExecutable("miniXyce-SRMT" ${FLAGS_SRMT})
+#createExecutable("miniXyce-SRMT-VG" ${FLAGS_SRMT_VG})
+
+# no sync consumer
+#createExecutable("miniXyce-NSC" ${FLAGS_NO_SYNC_CONSUMER})
+#createExecutable("miniXyce-NSC-VG" ${FLAGS_NO_SYNC_CONSUMER_VG})
+
 # new limit
 #createExecutable("miniXyce-NL" ${FLAGS_NEW_LIMIT})
 #createExecutable("miniXyce-NL-VG" ${FLAGS_NEW_LIMIT_VG})
@@ -122,3 +128,5 @@ createExecutable("miniXyce-AC" ${FLAGS_ALREADY_CONSUMED})
 #createExecutable("miniXyce-NLI" ${FLAGS_NEW_LIMIT_INVERTED})
 #createExecutable("miniXyce-NLI-VG" ${FLAGS_NEW_LIMIT_INVERTED_VG})
 
+# Best approach
+createExecutable("miniXyce-RHT" ${FLAGS_NEW_LIMIT_VG})
