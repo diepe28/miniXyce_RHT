@@ -5,7 +5,10 @@
 #include "RHT.h"
 
 RHT_QUEUE globalQueue;
+
+#ifdef APPROACH_SRMT
 SRMT_QUEUE srmtQueue;
+#endif
 
 long producerCount;
 long consumerCount;
@@ -19,6 +22,8 @@ int groupIncompleteConsumer;
 int groupIncompleteProducer;
 __thread long iterCountProducer;
 __thread long iterCountConsumer;
+
+
 
 void RHT_Produce_Secure(double value) {
 #if APPROACH_USING_POINTERS == 1
@@ -75,7 +80,7 @@ double RHT_Consume() {
 #elif APPROACH_ALREADY_CONSUMED == 1
     return AlreadyConsumed_Consume();
 #elif APPROACH_CONSUMER_NO_SYNC == 1 || APPROACH_NEW_LIMIT == 1 || APPROACH_WRITE_INVERTED_NEW_LIMIT == 1
-    return NoSyncConsumer_Consume();
+    return NoSyncConsumer_Consume(); // they all use the no sync consumer
 #elif APPROACH_SRMT == 1
     return SRMT_Consume();
 #else

@@ -11,10 +11,10 @@
 #define HPCCG_1_0_SYNCQUEUE_H
 
 
-#include <cstdlib>
-#include <cstdio>
+#include <stdlib.h>
+#include <stdio.h>
 #include <pthread.h>
-#include <zconf.h>
+//#include <zconf.h>
 #include <math.h>
 
 
@@ -49,15 +49,19 @@ typedef struct {
 
 #define UNIT 8
 typedef struct {
-    volatile int deqPtr, deqPtrDB, enqPtrLS;
-    double padding0[CACHE_LINE_SIZE - sizeof(int) * 3];
-    volatile int enqPtr, enqPtrDB, deqPtrLS;
-    double padding1[CACHE_LINE_SIZE - sizeof(int) * 3];
+    volatile int deqPtr;
+    double padding0[CACHE_LINE_SIZE - sizeof(int) * 1];
+    volatile int deqPtrDB, enqPtrLS;
+    double padding1[CACHE_LINE_SIZE - sizeof(int) * 2];
+    volatile int enqPtr;
+    double padding2[CACHE_LINE_SIZE - sizeof(int) * 1];
+    volatile int enqPtrDB, deqPtrLS;
+    double padding3[CACHE_LINE_SIZE - sizeof(int) * 2];
     volatile double *content;
-    double padding2[CACHE_LINE_SIZE - sizeof(double *)];
+    double padding4[CACHE_LINE_SIZE - sizeof(double *)];
     volatile double volatileValue;
     volatile int checkState;
-    double padding3[CACHE_LINE_SIZE - sizeof(int) - sizeof(double)];
+    double padding5[CACHE_LINE_SIZE - sizeof(int) - sizeof(double)];
     int pResidue, cResidue;
 }SRMT_QUEUE;
 
@@ -82,11 +86,11 @@ extern long consumerCount;
 
 // compiler option -ffast-math, has a problem with isnan method
 static int are_both_nan(double pValue, double cValue){
-    if(_GLIBCXX_FAST_MATH){
-        // todo, how to check for nan when the optimization is enabled
-        printf("The -ffast-math is enabled and there is a problem checking for NaN values...\n\n\n");
-        exit(1);
-    }
+    /* if(_GLIBCXX_FAST_MATH){ */
+    /*     // todo, how to check for nan when the optimization is enabled */
+    /*     printf("The -ffast-math is enabled and there is a problem checking for NaN values...\n\n\n"); */
+    /*     exit(1); */
+    /* } */
     return isnan(pValue) && isnan(cValue);
 }
 
@@ -119,12 +123,15 @@ static int are_both_nan(double pValue, double cValue){
     globalQueue.content[globalQueue.enqPtr] = value;                    \
     globalQueue.enqPtr = globalQueue.nextEnq;
 
-#if APPROACH_WRITE_INVERTED_NEW_LIMIT == 1
-#define write_move(value) write_move_inverted(value)
-#elif APPROACH_USING_POINTERS == 1 || APPROACH_ALREADY_CONSUMED == 1 || APPROACH_SRMT == 1 || APPROACH_CONSUMER_NO_SYNC == 1
+#if APPROACH_USING_POINTERS == 1 || APPROACH_ALREADY_CONSUMED == 1 || APPROACH_SRMT == 1 || APPROACH_CONSUMER_NO_SYNC == 1
 #define write_move(value) RHT_Produce_Secure(value);
-#else// this should be only for the new limit
+
+#elif APPROACH_WRITE_INVERTED_NEW_LIMIT == 1
+#define write_move(value) write_move_inverted(value)
+
+#elif APPROACH_NEW_LIMIT == 1
 #define write_move(value) write_move_normal(value)
+
 #endif
 
 #if VAR_GROUPING == 1
@@ -142,7 +149,7 @@ static int are_both_nan(double pValue, double cValue){
 #endif
 
 
-#define wait_for_thread() asm("pause"); asm("pause");
+#define wait_for_thread() asm("pause"); //asm("pause");
 
 
 #define wait_for_thread1()\
@@ -446,6 +453,7 @@ static INLINE void UsingPointers_Consume_Check(double currentValue) {
 
 
 // -------- SRMT Approach from Compiler-Managed Software-based Redundant ... paper ----------
+
 static INLINE void SRMT_Produce(double value) {
     srmtQueue.content[srmtQueue.enqPtrDB] = value;
     srmtQueue.enqPtrDB = (srmtQueue.enqPtrDB + 1) % RHT_QUEUE_SIZE;
@@ -489,6 +497,7 @@ static INLINE void SRMT_Consume_Check(double currentValue) {
 
     srmtQueue.deqPtrDB = (srmtQueue.deqPtrDB + 1) % RHT_QUEUE_SIZE;
 }
+
 
 // -------- NoSyncConsumer Approach, reducing sync operations in the consumer  ----------
 
@@ -572,15 +581,15 @@ static INLINE void WriteInvertedNewLimit_Produce(double value) {
 }
 
 static INLINE void WriteInverted_Produce_Secure(double value){
+    calc_new_distance(globalQueue.newLimit)
 
-    do {
+    while(globalQueue.newLimit < 8){
+        asm("pause");
         calc_new_distance(globalQueue.newLimit)
-    }while(globalQueue.newLimit < 3);
+    }
 
     write_move_inverted(value)
 }
-
-// todo check that the write inverted also call the consume from new limit
 
 //////////// 'PUBLIC' QUEUE METHODS //////////////////
 void RHT_Produce_Secure(double value);

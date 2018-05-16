@@ -1,4 +1,4 @@
-circuit = /home/diego/Documents/workspace/miniXyce_RHT/cmake-build-debug/tests/cirMedium.net
+circuit = /home/diego/Documents/workspace/miniXyce_RHT/cmake-build-debug/tests/cirBig.net
 t_start = 0
 t_step = 1e-08
 t_stop = 5e-06
