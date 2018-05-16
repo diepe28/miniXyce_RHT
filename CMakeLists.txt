@@ -33,13 +33,18 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DAPPROACH_NEW_ENQ_INDEX=0") # use with 
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DPERCENTAGE_OF_REPLICATION=0")
 
-# Modify this flags to test different approaches
 set(FLAGS_CURRENT "${CMAKE_CXX_FLAGS}")
+
+# These are other approaches of the literature
 set(FLAGS_CURRENT "${FLAGS_CURRENT} -DAPPROACH_USING_POINTERS=0")
 set(FLAGS_CURRENT "${FLAGS_CURRENT} -DAPPROACH_ALREADY_CONSUMED=0")
-set(FLAGS_CURRENT "${FLAGS_CURRENT} -DAPPROACH_NEW_LIMIT=1")
+set(FLAGS_CURRENT "${FLAGS_CURRENT} -DAPPROACH_SRMT=1")
+
+# These are our approaches
+set(FLAGS_CURRENT "${FLAGS_CURRENT} -DAPPROACH_CONSUMER_NO_SYNC=0")
+set(FLAGS_CURRENT "${FLAGS_CURRENT} -DAPPROACH_NEW_LIMIT=0") # new limit includes the consumer no sync
 set(FLAGS_CURRENT "${FLAGS_CURRENT} -DAPPROACH_WRITE_INVERTED_NEW_LIMIT=0")
-set(FLAGS_CURRENT "${FLAGS_CURRENT} -DVAR_GROUPING=1") # it can be used with any of the below approaches
+set(FLAGS_CURRENT "${FLAGS_CURRENT} -DVAR_GROUPING=0") # it can be used with any of the below approaches
 
 
 set(SOURCE_FILES
