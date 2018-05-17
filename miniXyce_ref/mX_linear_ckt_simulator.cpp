@@ -886,6 +886,11 @@ double main_execution_replicated(int p, int pid, int n, int argc, char* argv[]) 
 #endif
     }
 
+#if APPROACH_SRMT == 1
+    // done replication but UNIT might not have been reached
+    srmtQueue.enqPtr = srmtQueue.enqPtrDB;
+#endif
+
     //dperez, this is where the replicated execution ends
     if(pid == 0) {
         clock_gettime(CLOCK_MONOTONIC, &endExe);

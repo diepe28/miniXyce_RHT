@@ -56,7 +56,7 @@ echo "Copying files to Lyon..."
 scp $folder.tar.gz dperez@access.grid5000.fr:lyon/public
 echo "Files copied to Grid5K Storage"
 echo "Removing zip file"
-rm $folder.tar.gz
+rm $newFolder.tar.gz
 echo "Success!!"
 
 # Removing previously extracted folders (if any) in nantes, nancy and lyon
@@ -109,30 +109,30 @@ if [ 1 -eq 0 ]; then
 #5 executions, 32 threads, L1 core 0, T1 core 16, L2 core 2, T2 core 18, ..., L16 core 15, T16 core 31
 
 # Not replicated app with different mpi ranks (to see HT results)
-mpirun -np 1 miniXyce-RHT -c "$PWD"/tests/cirBig.net "$PWD" 5 > noRep-1rank.txt  &&
-mpirun -np 16 miniXyce-RHT -c "$PWD"/tests/cirBig.net "$PWD" 5 > noRep-16ranks.txt      &&
-mpirun -np 32 miniXyce-RHT -c "$PWD"/tests/cirBig.net "$PWD" 5 > noRep-32ranks.txt
+mpirun -np 1 miniXyce-RHT -c "$PWD"/tests/cirBig.net "$PWD" 5 > minixyce-noRep-1rank.txt  &&
+mpirun -np 16 miniXyce-RHT -c "$PWD"/tests/cirBig.net "$PWD" 5 > minixyce-noRep-16ranks.txt      &&
+mpirun -np 32 miniXyce-RHT -c "$PWD"/tests/cirBig.net "$PWD" 5 > minixyce-noRep-32ranks.txt
 
 # 1 rank test baselines vs Our Best Approach (NewLimit + varGrouping 8)
-mpirun -np 1 miniXyce-AC -c "$PWD"/tests/cirBig.net "$PWD" 5 2 0 2 > rep-ac-1rank-noHT.txt  &&
-mpirun -np 1 miniXyce-AC -c "$PWD"/tests/cirBig.net "$PWD" 5 2 0 16 > rep-ac-1rank-HT.txt  &&
+mpirun -np 1 miniXyce-AC -c "$PWD"/tests/cirBig.net "$PWD" 5 2 0 2 > minixyce-rep-ac-1rank-noHT.txt  &&
+mpirun -np 1 miniXyce-AC -c "$PWD"/tests/cirBig.net "$PWD" 5 2 0 16 > minixyce-rep-ac-1rank-HT.txt  &&
 
-mpirun -np 1 miniXyce-SRMT -c "$PWD"/tests/cirBig.net "$PWD" 5 2 0 2 > rep-srmt-1rank-noHT.txt  &&
-mpirun -np 1 miniXyce-SRMT -c "$PWD"/tests/cirBig.net "$PWD" 5 2 0 16 > rep-srmt-1rank-HT.txt  &&
+mpirun -np 1 miniXyce-SRMT -c "$PWD"/tests/cirBig.net "$PWD" 5 2 0 2 > minixyce-rep-srmt-1rank-noHT.txt  &&
+mpirun -np 1 miniXyce-SRMT -c "$PWD"/tests/cirBig.net "$PWD" 5 2 0 16 > minixyce-rep-srmt-1rank-HT.txt  &&
 
-mpirun -np 1 miniXyce-RHT -c "$PWD"/tests/cirBig.net "$PWD" 5 2 0 2  > rep-RHT-1rank-noHT.txt &&
-mpirun -np 1 miniXyce-RHT -c "$PWD"/tests/cirBig.net "$PWD" 5 2 0 16 > rep-RHT-1rank-HT.txt
+mpirun -np 1 miniXyce-RHT -c "$PWD"/tests/cirBig.net "$PWD" 5 2 0 2  > minixyce-rep-RHT-1rank-noHT.txt &&
+mpirun -np 1 miniXyce-RHT -c "$PWD"/tests/cirBig.net "$PWD" 5 2 0 16 > minixyce-rep-RHT-1rank-HT.txt
 
 # 16 ranks test baselines vs Our Best Approach (NewLimit + varGrouping 8)
 
-mpirun -np 16 miniXyce-AC -c "$PWD"/tests/cirBig.net "$PWD" 5 32 0 2 4 6 8 10 12 14 1 3 5 7 9 11 13 15 16 18 20 22 24 26 28 30 17 19 21 23 25 27 29 31 > rep-ac-16rank-noHT.txt  &&
-mpirun -np 16 miniXyce-AC -c "$PWD"/tests/cirBig.net "$PWD" 5 32 0 16 2 18 4 20 6 22 8 24 10 26 12 28 14 30 1 17 3 19 5 21 7 23 9 25 11 27 13 29 15 31 > rep-ac-16rank-HT.txt  &&
+mpirun -np 16 miniXyce-AC -c "$PWD"/tests/cirBig.net "$PWD" 5 32 0 2 4 6 8 10 12 14 1 3 5 7 9 11 13 15 16 18 20 22 24 26 28 30 17 19 21 23 25 27 29 31 > minixyce-rep-ac-16rank-noHT.txt  &&
+mpirun -np 16 miniXyce-AC -c "$PWD"/tests/cirBig.net "$PWD" 5 32 0 16 2 18 4 20 6 22 8 24 10 26 12 28 14 30 1 17 3 19 5 21 7 23 9 25 11 27 13 29 15 31 > minixyce-rep-ac-16rank-HT.txt  &&
 
-mpirun -np 16 miniXyce-SRMT -c "$PWD"/tests/cirBig.net "$PWD" 5 32 0 2 4 6 8 10 12 14 1 3 5 7 9 11 13 15 16 18 20 22 24 26 28 30 17 19 21 23 25 27 29 31 > rep-ac-16rank-noHT.txt  &&
-mpirun -np 16 miniXyce-SRMT -c "$PWD"/tests/cirBig.net "$PWD" 5 32 0 16 2 18 4 20 6 22 8 24 10 26 12 28 14 30 1 17 3 19 5 21 7 23 9 25 11 27 13 29 15 31 > rep-ac-16rank-HT.txt  &&
+mpirun -np 16 miniXyce-SRMT -c "$PWD"/tests/cirBig.net "$PWD" 5 32 0 2 4 6 8 10 12 14 1 3 5 7 9 11 13 15 16 18 20 22 24 26 28 30 17 19 21 23 25 27 29 31 > minixyce-rep-ac-16rank-noHT.txt  &&
+mpirun -np 16 miniXyce-SRMT -c "$PWD"/tests/cirBig.net "$PWD" 5 32 0 16 2 18 4 20 6 22 8 24 10 26 12 28 14 30 1 17 3 19 5 21 7 23 9 25 11 27 13 29 15 31 > minixyce-rep-ac-16rank-HT.txt  &&
 
-mpirun -np 16 miniXyce-RHT -c "$PWD"/tests/cirBig.net "$PWD" 5 32 0 2 4 6 8 10 12 14 1 3 5 7 9 11 13 15 16 18 20 22 24 26 28 30 17 19 21 23 25 27 29 31 > rep-RHT-16rank-noHT.txt  &&
-mpirun -np 16 miniXyce-RHT -c "$PWD"/tests/cirBig.net "$PWD" 5 32 0 16 2 18 4 20 6 22 8 24 10 26 12 28 14 30 1 17 3 19 5 21 7 23 9 25 11 27 13 29 15 31 > rep-RHT-16rank-HT.txt
+mpirun -np 16 miniXyce-RHT -c "$PWD"/tests/cirBig.net "$PWD" 5 32 0 2 4 6 8 10 12 14 1 3 5 7 9 11 13 15 16 18 20 22 24 26 28 30 17 19 21 23 25 27 29 31 > minixyce-rep-RHT-16rank-noHT.txt  &&
+mpirun -np 16 miniXyce-RHT -c "$PWD"/tests/cirBig.net "$PWD" 5 32 0 16 2 18 4 20 6 22 8 24 10 26 12 28 14 30 1 17 3 19 5 21 7 23 9 25 11 27 13 29 15 31 > minixyce-rep-RHT-16rank-HT.txt
 
 fi
 
