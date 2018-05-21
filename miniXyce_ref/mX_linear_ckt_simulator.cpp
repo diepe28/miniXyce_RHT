@@ -591,7 +591,7 @@ double main_execution_replicated(int p, int pid, int n, int argc, char* argv[]) 
     }
 
     int num_my_rows = dae->A->end_row - dae->A->start_row + 1;
-    /*-- RHT -- */ RHT_Produce_Secure(num_my_rows);
+    /*-- RHT -- */ RHT_Produce(num_my_rows);
 
     int num_my_nnz = dae->A->local_nnz, sum_nnz = dae->A->local_nnz;
     int min_nnz = num_my_nnz, max_nnz = num_my_nnz;
@@ -614,14 +614,14 @@ double main_execution_replicated(int p, int pid, int n, int argc, char* argv[]) 
 
     doc.add("Matrix_attributes", "");
 
-    /*-- RHT -- */ RHT_Produce_Secure(sum_rows);
-    /*-- RHT -- */ RHT_Produce_Secure(min_rows);
-    /*-- RHT -- */ RHT_Produce_Secure(max_rows);
+    /*-- RHT -- */ RHT_Produce(sum_rows);
+    /*-- RHT -- */ RHT_Produce(min_rows);
+    /*-- RHT -- */ RHT_Produce(max_rows);
     tempVar = (double) sum_rows / p;
-    /*-- RHT -- */ RHT_Produce_Secure(tempVar);
-    /*-- RHT -- */ RHT_Produce_Secure(sum_nnz);
-    /*-- RHT -- */ RHT_Produce_Secure(min_nnz);
-    /*-- RHT -- */ RHT_Produce_Secure(max_nnz);
+    /*-- RHT -- */ RHT_Produce(tempVar);
+    /*-- RHT -- */ RHT_Produce(sum_nnz);
+    /*-- RHT -- */ RHT_Produce(min_nnz);
+    /*-- RHT -- */ RHT_Produce(max_nnz);
     tempVar2 = (double) sum_nnz / p;
     /*-- RHT -- */ RHT_Produce_Volatile(tempVar2);
 
@@ -642,19 +642,19 @@ double main_execution_replicated(int p, int pid, int n, int argc, char* argv[]) 
     if (!init_cond_specified) {
         std::vector<double> init_cond_guess;
 
-        /*-- RHT -- */ RHT_Produce_Secure(num_my_rows);
+        /*-- RHT -- */ RHT_Produce(num_my_rows);
         for (int i = 0; i < num_my_rows; i++) {
             init_cond_guess.push_back((double) (0));
         }
 
-        /*-- RHT -- */ RHT_Produce_Secure(t_start);
+        /*-- RHT -- */ RHT_Produce(t_start);
         /*-- RHT -- */ std::vector<double> init_RHS = evaluate_b_producer(t_start, dae);
         /*-- RHT -- */ gmres_producer(dae->A, init_RHS, init_cond_guess, tol, res, k, init_cond, iters, restarts);
 
-        /*-- RHT -- */ RHT_Produce_Secure(tol);
-        /*-- RHT -- */ RHT_Produce_Secure(k);
-        /*-- RHT -- */ RHT_Produce_Secure(iters);
-        /*-- RHT -- */ RHT_Produce_Secure(restarts);
+        /*-- RHT -- */ RHT_Produce(tol);
+        /*-- RHT -- */ RHT_Produce(k);
+        /*-- RHT -- */ RHT_Produce(iters);
+        /*-- RHT -- */ RHT_Produce(restarts);
         /*-- RHT -- */ RHT_Produce_Volatile(res);
 
         doc.add("DCOP Calculation", "");
@@ -770,7 +770,7 @@ double main_execution_replicated(int p, int pid, int n, int argc, char* argv[]) 
         while (curr) {
             int col_idx = curr->column;
             double value = (curr->value) / t_step;
-            /*-- RHT -- */ RHT_Produce_Secure(value);
+            /*-- RHT -- */ RHT_Produce(value);
             /*-- RHT -- */ distributed_sparse_matrix_add_to_producer(A, row_idx, col_idx, value, n, p);
 
             curr = curr->next_in_row;
@@ -785,14 +785,14 @@ double main_execution_replicated(int p, int pid, int n, int argc, char* argv[]) 
     double total_gmres_res = 0.0;
     int total_gmres_iters = 0;
     int trans_steps = 0;
-    /*-- RHT -- */ RHT_Produce_Secure(t);
-    /*-- RHT -- */ RHT_Produce_Secure(total_gmres_res);
-    /*-- RHT -- */ RHT_Produce_Secure(total_gmres_iters);
-    /*-- RHT -- */ RHT_Produce_Secure(trans_steps);
+    /*-- RHT -- */ RHT_Produce(t);
+    /*-- RHT -- */ RHT_Produce(total_gmres_res);
+    /*-- RHT -- */ RHT_Produce(total_gmres_iters);
+    /*-- RHT -- */ RHT_Produce(trans_steps);
 
     while (t < t_stop) {
         trans_steps++;
-        /*-- RHT -- */ RHT_Produce_Secure(trans_steps);
+        /*-- RHT -- */ RHT_Produce(trans_steps);
 
         // new time point t => new value for b(t)
 
@@ -811,8 +811,8 @@ double main_execution_replicated(int p, int pid, int n, int argc, char* argv[]) 
         /*-- RHT -- */ gmres_producer(A, RHS, init_cond, tol, res, k, init_cond, iters, restarts);
         total_gmres_iters += iters;
         total_gmres_res += res;
-        /*-- RHT -- */ RHT_Produce_Secure(total_gmres_iters);
-        /*-- RHT -- */ RHT_Produce_Secure(total_gmres_res);
+        /*-- RHT -- */ RHT_Produce(total_gmres_iters);
+        /*-- RHT -- */ RHT_Produce(total_gmres_res);
 
         // write the results to file
         double io_tstart = mX_timer();
@@ -843,7 +843,7 @@ double main_execution_replicated(int p, int pid, int n, int argc, char* argv[]) 
         // increment t
 
         t += t_step;
-        /*-- RHT -- */ RHT_Produce_Secure(t);
+        /*-- RHT -- */ RHT_Produce(t);
     }
 
     // Hurray, the transient simulation is done!
@@ -857,11 +857,11 @@ double main_execution_replicated(int p, int pid, int n, int argc, char* argv[]) 
     tend = mX_timer();
     double sim_end = tend - sim_start;
 
-    /*-- RHT -- */ RHT_Produce_Secure(trans_steps);
-    /*-- RHT -- */ RHT_Produce_Secure(tol);
-    /*-- RHT -- */ RHT_Produce_Secure(k);
+    /*-- RHT -- */ RHT_Produce(trans_steps);
+    /*-- RHT -- */ RHT_Produce(tol);
+    /*-- RHT -- */ RHT_Produce(k);
     tempVar = total_gmres_iters / trans_steps;
-    /*-- RHT -- */ RHT_Produce_Secure(tempVar);
+    /*-- RHT -- */ RHT_Produce(tempVar);
     tempVar2 = total_gmres_res / trans_steps;
     /*-- RHT -- */ RHT_Produce_Volatile(tempVar2);
 
@@ -888,7 +888,7 @@ double main_execution_replicated(int p, int pid, int n, int argc, char* argv[]) 
 
 #if APPROACH_SRMT == 1
     // done replication but UNIT might not have been reached
-    srmtQueue.enqPtr = srmtQueue.enqPtrDB;
+    wangQueue.enqPtr = wangQueue.enqPtrDB;
 #endif
 
     //dperez, this is where the replicated execution ends
@@ -941,47 +941,47 @@ void consumer_thread_func(void *args) {
     // document circuit and matrix attributes
     int total_devices = num_voltage_sources + num_current_sources + num_resistors + num_capacitors + num_inductors;
 
-    RHT_Consume_Volatile(total_devices);
+    RHT_Consume_Volatile((double)total_devices);
 
     if (num_resistors > 0) {
-        RHT_Consume_Volatile(num_resistors);
+        RHT_Consume_Volatile((double)num_resistors);
     }
 
     if (num_inductors > 0) {
-        RHT_Consume_Volatile(num_inductors);
+        RHT_Consume_Volatile((double)num_inductors);
     }
 
     if (num_capacitors > 0) {
-        RHT_Consume_Volatile(num_capacitors);
+        RHT_Consume_Volatile((double)num_capacitors);
     }
 
     if (num_voltage_sources > 0) {
-        RHT_Consume_Volatile(num_voltage_sources);
+        RHT_Consume_Volatile((double)num_voltage_sources);
     }
 
     if (num_current_sources > 0) {
-        RHT_Consume_Volatile(num_current_sources);
+        RHT_Consume_Volatile((double)num_current_sources);
     }
 
     int num_my_rows = dae->A->end_row - dae->A->start_row + 1;
-    /*-- RHT -- */ RHT_Consume_Check(num_my_rows );
+    /*-- RHT -- */ RHT_Consume_Check((double)num_my_rows);
 
     int num_my_nnz = dae->A->local_nnz, sum_nnz = dae->A->local_nnz;
     int min_nnz = num_my_nnz, max_nnz = num_my_nnz;
     int min_rows = num_my_rows, max_rows = num_my_rows, sum_rows = num_my_rows;
 
 #ifdef HAVE_MPI
-    /*-- RHT -- */ sum_nnz = RHT_Consume();
-    /*-- RHT -- */ min_nnz = RHT_Consume();
-    /*-- RHT -- */ max_nnz = RHT_Consume();
-    /*-- RHT -- */ sum_rows = RHT_Consume();
-    /*-- RHT -- */ min_rows = RHT_Consume();
-    /*-- RHT -- */ max_rows = RHT_Consume();
+    /*-- RHT -- */ sum_nnz = (int) RHT_Consume();
+    /*-- RHT -- */ min_nnz = (int) RHT_Consume();
+    /*-- RHT -- */ max_nnz = (int) RHT_Consume();
+    /*-- RHT -- */ sum_rows = (int) RHT_Consume();
+    /*-- RHT -- */ min_rows = (int) RHT_Consume();
+    /*-- RHT -- */ max_rows = (int) RHT_Consume();
 #endif
 
-    /*-- RHT -- */ RHT_Consume_Check(sum_rows);
-    /*-- RHT -- */ RHT_Consume_Check(min_rows);
-    /*-- RHT -- */ RHT_Consume_Check(max_rows);
+    /*-- RHT -- */ RHT_Consume_Check((double)sum_rows);
+    /*-- RHT -- */ RHT_Consume_Check((double)min_rows);
+    /*-- RHT -- */ RHT_Consume_Check((double)max_rows);
     tempVar = (double) sum_rows / p;
     /*-- RHT -- */ RHT_Consume_Check(tempVar);
     /*-- RHT -- */ RHT_Consume_Check(sum_nnz);
@@ -1147,7 +1147,7 @@ double test_execution_producer(int n, int producerCore) {
 
     // To avoid compiler marking dead code
     if(total < 0) {
-        fprintf(stderr, "Something about totall %d\n", total);
+        fprintf(stderr, "Something about totall %f\n", total);
     }
 
     elapsedExe = (endExe.tv_sec - startExe.tv_sec);
@@ -1178,7 +1178,7 @@ void test_execution_consumer(void * args) {
 
     // To avoid compiler marking dead code
     if(total < 0) {
-        fprintf(stderr, "Something about totall %d\n", total);
+        fprintf(stderr, "Something about totall %f\n", total);
     }
 }
 

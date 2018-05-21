@@ -201,13 +201,13 @@ void mX_matrix_utils::distributed_sparse_matrix_add_to_producer(distributed_spar
 
     if ((row_idx >= M->start_row) && (row_idx <= M->end_row)) {
         M->local_nnz++;
-        /*-- RHT -- */ RHT_Produce_Secure(M->local_nnz);
+        /*-- RHT -- */ RHT_Produce(M->local_nnz);
 
         // ok, so the processor that's supposed to store M[row_idx][col_idx] is here
         // navigate through the fellow's threaded list and do the needful
 
         bool inserted = false;
-        /*-- RHT -- */ RHT_Produce_Secure(inserted);
+        /*-- RHT -- */ RHT_Produce(inserted);
 
         distributed_sparse_matrix_entry *prev = 0;
         distributed_sparse_matrix_entry *curr = M->row_headers[row_idx - M->start_row];
@@ -219,16 +219,16 @@ void mX_matrix_utils::distributed_sparse_matrix_add_to_producer(distributed_spar
             } else {
                 if (curr->column == col_idx) {
                     curr->value = curr->value + val;
-                    /*-- RHT -- */ RHT_Produce_Secure(curr->value);
+                    /*-- RHT -- */ RHT_Produce(curr->value);
                     inserted = true;
-                    /*-- RHT -- */ RHT_Produce_Secure(inserted);
+                    /*-- RHT -- */ RHT_Produce(inserted);
                 } else {
                     distributed_sparse_matrix_entry *entry_ptr_1 = new distributed_sparse_matrix_entry();
                     entry_ptr_1->column = col_idx;
                     entry_ptr_1->value = val;
                     entry_ptr_1->next_in_row = curr;
-                    /*-- RHT -- */ RHT_Produce_Secure(entry_ptr_1->column);
-                    /*-- RHT -- */ RHT_Produce_Secure(entry_ptr_1->value);
+                    /*-- RHT -- */ RHT_Produce(entry_ptr_1->column);
+                    /*-- RHT -- */ RHT_Produce(entry_ptr_1->value);
 
                     if (prev) {
                         prev->next_in_row = entry_ptr_1;
@@ -237,7 +237,7 @@ void mX_matrix_utils::distributed_sparse_matrix_add_to_producer(distributed_spar
                     }
 
                     inserted = true;
-                    /*-- RHT -- */ RHT_Produce_Secure(inserted);
+                    /*-- RHT -- */ RHT_Produce(inserted);
                 }
             }
         }
@@ -247,8 +247,8 @@ void mX_matrix_utils::distributed_sparse_matrix_add_to_producer(distributed_spar
             entry_ptr_1->column = col_idx;
             entry_ptr_1->value = val;
             entry_ptr_1->next_in_row = curr;
-            /*-- RHT -- */ RHT_Produce_Secure(entry_ptr_1->column);
-            /*-- RHT -- */ RHT_Produce_Secure(entry_ptr_1->value);
+            /*-- RHT -- */ RHT_Produce(entry_ptr_1->column);
+            /*-- RHT -- */ RHT_Produce(entry_ptr_1->value);
 
             if (prev) {
                 prev->next_in_row = entry_ptr_1;
@@ -274,49 +274,49 @@ void mX_matrix_utils::distributed_sparse_matrix_add_to_producer(distributed_spar
 
         int pid_to_send_info;
         bool pid_found = false;
-        /*-- RHT -- */ RHT_Produce_Secure(pid_found);
+        /*-- RHT -- */ RHT_Produce(pid_found);
 
         int start_pid = 0;
         int end_pid = p - 1;
         int mid_pid = (start_pid + end_pid) / 2;
-        /*-- RHT -- */ RHT_Produce_Secure(start_pid);
-        /*-- RHT -- */ RHT_Produce_Secure(end_pid);
-        /*-- RHT -- */ RHT_Produce_Secure(mid_pid);
+        /*-- RHT -- */ RHT_Produce(start_pid);
+        /*-- RHT -- */ RHT_Produce(end_pid);
+        /*-- RHT -- */ RHT_Produce(mid_pid);
 
         int mid_start_row = (n / p) * (mid_pid) + ((mid_pid < n % p) ? mid_pid : n % p);
         int mid_end_row = mid_start_row + (n / p) - 1 + ((mid_pid < n % p) ? 1 : 0);
-        /*-- RHT -- */ RHT_Produce_Secure(mid_start_row);
-        /*-- RHT -- */ RHT_Produce_Secure(mid_end_row);
+        /*-- RHT -- */ RHT_Produce(mid_start_row);
+        /*-- RHT -- */ RHT_Produce(mid_end_row);
 
         //dperez, maybe we can convert this loop into our scheme
         while (!pid_found) {
             if (row_idx < mid_start_row) {
                 end_pid = mid_pid - 1;
                 mid_pid = (start_pid + end_pid) / 2;
-                /*-- RHT -- */ RHT_Produce_Secure(end_pid);
-                /*-- RHT -- */ RHT_Produce_Secure(mid_pid);
+                /*-- RHT -- */ RHT_Produce(end_pid);
+                /*-- RHT -- */ RHT_Produce(mid_pid);
             } else {
                 if (row_idx > mid_end_row) {
                     start_pid = mid_pid + 1;
                     mid_pid = (start_pid + end_pid) / 2;
-                    /*-- RHT -- */ RHT_Produce_Secure(start_pid);
-                    /*-- RHT -- */ RHT_Produce_Secure(mid_pid);
+                    /*-- RHT -- */ RHT_Produce(start_pid);
+                    /*-- RHT -- */ RHT_Produce(mid_pid);
                 } else {
                     pid_to_send_info = mid_pid;
                     pid_found = true;
-                    /*-- RHT -- */ RHT_Produce_Secure(pid_to_send_info);
-                    /*-- RHT -- */ RHT_Produce_Secure(pid_found);
+                    /*-- RHT -- */ RHT_Produce(pid_to_send_info);
+                    /*-- RHT -- */ RHT_Produce(pid_found);
                 }
             }
 
             mid_start_row = (n / p) * (mid_pid) + ((mid_pid < n % p) ? mid_pid : n % p);
             mid_end_row = mid_start_row + (n / p) - 1 + ((mid_pid < n % p) ? 1 : 0);
-            /*-- RHT -- */ RHT_Produce_Secure(mid_start_row);
-            /*-- RHT -- */ RHT_Produce_Secure(mid_end_row);
+            /*-- RHT -- */ RHT_Produce(mid_start_row);
+            /*-- RHT -- */ RHT_Produce(mid_end_row);
         }
 
         bool send_instruction_posted = false;
-        /*-- RHT -- */ RHT_Produce_Secure(send_instruction_posted);
+        /*-- RHT -- */ RHT_Produce(send_instruction_posted);
 
         std::list<data_transfer_instruction *>::iterator it1;
 
@@ -332,21 +332,21 @@ void mX_matrix_utils::distributed_sparse_matrix_add_to_producer(distributed_spar
                 }
 
                 if (!send_instruction_posted) {
-                    /*-- RHT -- */ RHT_Produce_Secure(col_idx);
+                    /*-- RHT -- */ RHT_Produce(col_idx);
                     // is this a volatile access?
                     (*it1)->indices.push_back(col_idx);
                     send_instruction_posted = true;
                 }
 
-                /*-- RHT -- */ RHT_Produce_Secure(send_instruction_posted);
+                /*-- RHT -- */ RHT_Produce(send_instruction_posted);
             }
         }
 
         if (!send_instruction_posted) {
             data_transfer_instruction *dti_ptr_1 = new data_transfer_instruction();
             dti_ptr_1->pid = pid_to_send_info;
-            /*-- RHT -- */ RHT_Produce_Secure(dti_ptr_1->pid);
-            /*-- RHT -- */ RHT_Produce_Secure(col_idx);
+            /*-- RHT -- */ RHT_Produce(dti_ptr_1->pid);
+            /*-- RHT -- */ RHT_Produce(col_idx);
             // is this a volatile access?
             dti_ptr_1->indices.push_back(col_idx);
 
@@ -624,8 +624,8 @@ void mX_matrix_utils::sparse_matrix_vector_product_producer(distributed_sparse_m
 
     int start_row = A->start_row;
     int end_row = A->end_row;
-    /*-- RHT -- */ RHT_Produce_Secure(start_row);
-    /*-- RHT -- */ RHT_Produce_Secure(end_row);
+    /*-- RHT -- */ RHT_Produce(start_row);
+    /*-- RHT -- */ RHT_Produce(end_row);
 
 #ifdef HAVE_MPI
     // ok, now's the time to follow the send instructions that each pid has been maintaining
@@ -691,7 +691,7 @@ void mX_matrix_utils::sparse_matrix_vector_product_producer(distributed_sparse_m
                     double x_vec_entry;
                     MPI_Status status;
                     MPI_Recv(&x_vec_entry, 1, MPI_DOUBLE, MPI_ANY_SOURCE, col_idx, MPI_COMM_WORLD, &status);
-                    /*-- RHT -- */ RHT_Produce_Secure(x_vec_entry);
+                    /*-- RHT -- */ RHT_Produce(x_vec_entry);
 
                     x_vec_entries[col_idx] = x_vec_entry;
                     y[i - start_row] += x_vec_entry * (curr->value);
@@ -706,7 +706,7 @@ void mX_matrix_utils::sparse_matrix_vector_product_producer(distributed_sparse_m
 //                groupVarProducer = 0;
 //            }
 //#else
-            /*-- RHT -- */ RHT_Produce_Secure(y[i - start_row]);
+            /*-- RHT -- */ RHT_Produce(y[i - start_row]);
 //#endif
             curr = curr->next_in_row;
         }
@@ -852,7 +852,7 @@ double mX_matrix_utils::norm_producer(std::vector<double> &x) {
     replicate_loop_producer(0, x.size(), i, i++, local_norm, local_norm += x[i] * x[i])
 #ifdef HAVE_MPI
     MPI_Allreduce(&local_norm, &global_norm, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    /*-- RHT -- */ RHT_Produce_Secure(global_norm);
+    /*-- RHT -- */ RHT_Produce(global_norm);
 #else
     global_norm = local_norm;
 #endif
@@ -1081,8 +1081,8 @@ void mX_matrix_utils::gmres_producer(distributed_sparse_matrix* A, std::vector<d
     double tempVar;
     int start_row = A->start_row;
     int end_row = A->end_row;
-    /*-- RHT -- */ RHT_Produce_Secure(start_row);
-    /*-- RHT -- */ RHT_Produce_Secure(end_row);
+    /*-- RHT -- */ RHT_Produce(start_row);
+    /*-- RHT -- */ RHT_Produce(end_row);
     x = x0;
 
     std::vector<double> temp1;
@@ -1092,12 +1092,12 @@ void mX_matrix_utils::gmres_producer(distributed_sparse_matrix* A, std::vector<d
     replicate_loop_producer(0, temp1.size(), i, i++, temp1[i], temp1[i] -= b[i])
 
     err = norm_producer(temp1);
-    /*-- RHT -- */ RHT_Produce_Secure(err);
+    /*-- RHT -- */ RHT_Produce(err);
 
     restarts = -1;
     iters = 0;
-    /*-- RHT -- */ RHT_Produce_Secure(restarts);
-    /*-- RHT -- */ RHT_Produce_Secure(iters);
+    /*-- RHT -- */ RHT_Produce(restarts);
+    /*-- RHT -- */ RHT_Produce(iters);
 
     while (err > tol) {
         // at the start of every re-start
@@ -1118,15 +1118,15 @@ void mX_matrix_utils::gmres_producer(distributed_sparse_matrix* A, std::vector<d
                                         V.push_back(temp2);)
 
         double beta = norm_producer(temp1);
-        /*-- RHT -- */ RHT_Produce_Secure(beta);
+        /*-- RHT -- */ RHT_Produce(beta);
 
         i = start_row;
         replicate_loop_producer(start_row, end_row + 1, i, i++, V[i - start_row][0], V[i - start_row][0] /= beta)
 
         err = beta;
         iters = 0;
-        /*-- RHT -- */ RHT_Produce_Secure(err);
-        /*-- RHT -- */ RHT_Produce_Secure(iters);
+        /*-- RHT -- */ RHT_Produce(err);
+        /*-- RHT -- */ RHT_Produce(iters);
 
         std::vector<double> cosines;
         std::vector<double> sines;
@@ -1147,7 +1147,7 @@ void mX_matrix_utils::gmres_producer(distributed_sparse_matrix* A, std::vector<d
 
         while ((err > tol) && (iters < k)) {
             iters++;
-            /*-- RHT -- */ RHT_Produce_Secure(iters);
+            /*-- RHT -- */ RHT_Produce(iters);
 
             // Mr.GMRES is now going to update the V matrix
             // for which he will require a matrix vector multiplication
@@ -1176,7 +1176,7 @@ void mX_matrix_utils::gmres_producer(distributed_sparse_matrix* A, std::vector<d
                                         local_dot += temp2[j - start_row] * V[j - start_row][i])
 #ifdef HAVE_MPI
                 MPI_Allreduce(&local_dot,&global_dot,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
-                /*-- RHT -- */ RHT_Produce_Secure(global_dot);
+                /*-- RHT -- */ RHT_Produce(global_dot);
 #else
                 global_dot = local_dot;
 #endif
@@ -1189,7 +1189,7 @@ void mX_matrix_utils::gmres_producer(distributed_sparse_matrix* A, std::vector<d
             }
 
             double normTemp2 = norm_producer(temp2);
-            /*-- RHT -- */ RHT_Produce_Secure(normTemp2);
+            /*-- RHT -- */ RHT_Produce(normTemp2);
             new_col_H.push_back(normTemp2);
 
             int i = start_row;
@@ -1214,23 +1214,23 @@ void mX_matrix_utils::gmres_producer(distributed_sparse_matrix* A, std::vector<d
 
 
             double r = std::sqrt(new_col_H[iters - 1] * new_col_H[iters - 1] + new_col_H[iters] * new_col_H[iters]);
-            /*-- RHT -- */ RHT_Produce_Secure(r);
+            /*-- RHT -- */ RHT_Produce(r);
 
             tempVar = new_col_H[iters - 1] / r;
-            /*-- RHT -- */ RHT_Produce_Secure(tempVar);
+            /*-- RHT -- */ RHT_Produce(tempVar);
             cosines.push_back(tempVar);
 
             tempVar = new_col_H[iters] / r;
             sines.push_back(tempVar);
-            /*-- RHT -- */ RHT_Produce_Secure(tempVar);
+            /*-- RHT -- */ RHT_Produce(tempVar);
 
             double old_i = new_col_H[iters - 1];
             double old_i_plus_one = new_col_H[iters];
-            /*-- RHT -- */ RHT_Produce_Secure(old_i);
-            /*-- RHT -- */ RHT_Produce_Secure(old_i_plus_one);
+            /*-- RHT -- */ RHT_Produce(old_i);
+            /*-- RHT -- */ RHT_Produce(old_i_plus_one);
 
             new_col_H[iters - 1] = cosines.back() * old_i + sines.back() * old_i_plus_one;
-            /*-- RHT -- */ RHT_Produce_Secure(new_col_H[iters - 1]);
+            /*-- RHT -- */ RHT_Produce(new_col_H[iters - 1]);
             new_col_H.pop_back();
 
             R.push_back(new_col_H);
@@ -1241,11 +1241,11 @@ void mX_matrix_utils::gmres_producer(distributed_sparse_matrix* A, std::vector<d
 
             double old_g = g[iters - 1];
             g[iters - 1] = old_g * cosines.back();
-            /*-- RHT -- */ RHT_Produce_Secure(old_g);
-            /*-- RHT -- */ RHT_Produce_Secure(g[iters - 1]);
+            /*-- RHT -- */ RHT_Produce(old_g);
+            /*-- RHT -- */ RHT_Produce(g[iters - 1]);
             tempVar = -old_g * sines.back();
             // is it be a volatile access?
-            /*-- RHT -- */ RHT_Produce_Secure(tempVar);
+            /*-- RHT -- */ RHT_Produce(tempVar);
             g.push_back(tempVar);
 
             err = std::abs(g.back());
@@ -1267,7 +1267,7 @@ void mX_matrix_utils::gmres_producer(distributed_sparse_matrix* A, std::vector<d
 
             tempVar = (g[i] - sum) / R[i][i];
 
-            /*-- RHT -- */ RHT_Produce_Secure(tempVar);
+            /*-- RHT -- */ RHT_Produce(tempVar);
             y.push_back(tempVar);
         }
 
@@ -1280,7 +1280,7 @@ void mX_matrix_utils::gmres_producer(distributed_sparse_matrix* A, std::vector<d
             replicate_loop_producer(-1, iters - 1, j, j--, sum, sum += y[iters - 1 - j] * V[i - start_row][j])
 
             x[i - start_row] += sum;
-            /*-- RHT -- */ RHT_Produce_Secure(x[i - start_row]);
+            /*-- RHT -- */ RHT_Produce(x[i - start_row]);
         }
 
         // the new x is also ready
@@ -1291,7 +1291,7 @@ void mX_matrix_utils::gmres_producer(distributed_sparse_matrix* A, std::vector<d
 
     if (restarts < 0) {
         restarts = 0;
-        /*-- RHT -- */ RHT_Produce_Secure(restarts);
+        /*-- RHT -- */ RHT_Produce(restarts);
     }
 }
 

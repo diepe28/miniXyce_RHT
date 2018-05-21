@@ -6,8 +6,8 @@
 
 RHT_QUEUE globalQueue;
 
-#ifdef APPROACH_SRMT
-SRMT_QUEUE srmtQueue;
+#ifdef APPROACH_WANG
+WANG_QUEUE wangQueue;
 #endif
 
 long producerCount;
@@ -25,7 +25,7 @@ __thread long iterCountConsumer;
 
 
 
-void RHT_Produce_Secure(double value) {
+void RHT_Produce(double value) {
 #if APPROACH_USING_POINTERS == 1
     UsingPointers_Produce(value);
 #elif APPROACH_ALREADY_CONSUMED == 1 || APPROACH_CONSUMER_NO_SYNC == 1 // consumer no sync uses alreadyConsume produce method
@@ -34,25 +34,8 @@ void RHT_Produce_Secure(double value) {
     AlreadyConsumed_Produce(value);
 #elif APPROACH_WRITE_INVERTED_NEW_LIMIT == 1
     WriteInverted_Produce_Secure(value);
-#elif APPROACH_SRMT == 1
-    SRMT_Produce(value);
-#else
-    printf("NO APPROACH SPECIFIED\n");
-    exit(1);
-#endif
-}
-
-void RHT_Produce(double value) {
-#if APPROACH_USING_POINTERS == 1
-    UsingPointers_Produce(value);
-#elif APPROACH_ALREADY_CONSUMED == 1 || APPROACH_CONSUMER_NO_SYNC == 1 // consumer no sync uses alreadyConsume produce method
-    AlreadyConsumed_Produce(value);
-#elif APPROACH_NEW_LIMIT == 1
-    NewLimit_Produce(value);
-#elif APPROACH_WRITE_INVERTED_NEW_LIMIT == 1
-    WriteInvertedNewLimit_Produce(value);
-#elif APPROACH_SRMT == 1
-    SRMT_Produce(value);
+#elif APPROACH_WANG == 1
+    Wang_Produce(value);
 #else
     printf("NO APPROACH SPECIFIED\n");
     exit(1);
@@ -66,8 +49,8 @@ void RHT_Consume_Check(double currentValue) {
     AlreadyConsumed_Consume_Check(currentValue);
 #elif APPROACH_CONSUMER_NO_SYNC == 1 || APPROACH_NEW_LIMIT == 1 || APPROACH_WRITE_INVERTED_NEW_LIMIT == 1
     NoSyncConsumer_Consume_Check(currentValue); // they all use the no sync consumer
-#elif APPROACH_SRMT == 1
-    SRMT_Consume_Check(currentValue);
+#elif APPROACH_WANG == 1
+    Wang_Consume_Check(currentValue);
 #else
     printf("NO APPROACH SPECIFIED\n");
     exit(1);
@@ -81,8 +64,8 @@ double RHT_Consume() {
     return AlreadyConsumed_Consume();
 #elif APPROACH_CONSUMER_NO_SYNC == 1 || APPROACH_NEW_LIMIT == 1 || APPROACH_WRITE_INVERTED_NEW_LIMIT == 1
     return NoSyncConsumer_Consume(); // they all use the no sync consumer
-#elif APPROACH_SRMT == 1
-    return SRMT_Consume();
+#elif APPROACH_WANG == 1
+    return Wang_Consume();
 #else
     printf("NO APPROACH SPECIFIED\n");
     exit(1);

@@ -37,13 +37,13 @@ set(FLAGS_CURRENT "${CMAKE_CXX_FLAGS}")
 # These are other approaches of the literature
 set(FLAGS_CURRENT "${FLAGS_CURRENT} -DAPPROACH_USING_POINTERS=0")
 set(FLAGS_CURRENT "${FLAGS_CURRENT} -DAPPROACH_ALREADY_CONSUMED=0")
-set(FLAGS_CURRENT "${FLAGS_CURRENT} -DAPPROACH_SRMT=0")
+set(FLAGS_CURRENT "${FLAGS_CURRENT} -DAPPROACH_WANG=1")
 
 # These are our approaches
 set(FLAGS_CURRENT "${FLAGS_CURRENT} -DAPPROACH_CONSUMER_NO_SYNC=0")
-set(FLAGS_CURRENT "${FLAGS_CURRENT} -DAPPROACH_NEW_LIMIT=1") # new limit includes the consumer no sync
+set(FLAGS_CURRENT "${FLAGS_CURRENT} -DAPPROACH_NEW_LIMIT=0") # new limit includes the consumer no sync
 set(FLAGS_CURRENT "${FLAGS_CURRENT} -DAPPROACH_WRITE_INVERTED_NEW_LIMIT=0")
-set(FLAGS_CURRENT "${FLAGS_CURRENT} -DVAR_GROUPING=1") # it can be used with any of the below approaches
+set(FLAGS_CURRENT "${FLAGS_CURRENT} -DVAR_GROUPING=0") # it can be used with any of the below approaches
 
 
 set(SOURCE_FILES
@@ -76,7 +76,7 @@ endfunction(createExecutable)
 
 
 #current, for testing
-#createExecutable("miniXyce-Current" ${FLAGS_CURRENT})
+createExecutable("miniXyce-Current" ${FLAGS_CURRENT})
 
 # using pointer flags
 set(FLAGS_USING_POINTERS "${CMAKE_CXX_FLAGS} -DAPPROACH_USING_POINTERS=1")
@@ -87,7 +87,7 @@ set(FLAGS_ALREADY_CONSUMED "${CMAKE_CXX_FLAGS} -DAPPROACH_ALREADY_CONSUMED=1")
 set(FLAGS_ALREADY_CONSUMED_VG " ${FLAGS_ALREADY_CONSUMED} -DVAR_GROUPING=1")
 
 # using SRMT value flags
-set(FLAGS_SRMT "${CMAKE_CXX_FLAGS} -DAPPROACH_SRMT=1")
+set(FLAGS_SRMT "${CMAKE_CXX_FLAGS} -DAPPROACH_WANG=1")
 set(FLAGS_SRMT_VG " ${FLAGS_SRMT} -DVAR_GROUPING=1")
 
 # using no sync consumer approachh
@@ -108,11 +108,11 @@ set(FLAGS_NEW_LIMIT_INVERTED_VG " ${FLAGS_NEW_LIMIT_INVERTED} -DVAR_GROUPING=1")
 #createExecutable("miniXyce-UP-VG" ${FLAGS_USING_POINTERS_VG})
 
 # already consumed
-createExecutable("miniXyce-AC" ${FLAGS_ALREADY_CONSUMED})
+#createExecutable("miniXyce-AC" ${FLAGS_ALREADY_CONSUMED})
 #createExecutable("miniXyce-AC-VG" ${FLAGS_ALREADY_CONSUMED_VG})
 
 # SRMT
-createExecutable("miniXyce-SRMT" ${FLAGS_SRMT})
+#createExecutable("miniXyce-SRMT" ${FLAGS_SRMT})
 #createExecutable("miniXyce-SRMT-VG" ${FLAGS_SRMT_VG})
 
 # no sync consumer
@@ -128,4 +128,4 @@ createExecutable("miniXyce-SRMT" ${FLAGS_SRMT})
 #createExecutable("miniXyce-NLI-VG" ${FLAGS_NEW_LIMIT_INVERTED_VG})
 
 # Best approach
-createExecutable("miniXyce-RHT" ${FLAGS_NEW_LIMIT_VG})
+#createExecutable("miniXyce-RHT" ${FLAGS_NEW_LIMIT_VG})

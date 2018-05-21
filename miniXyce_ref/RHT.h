@@ -63,13 +63,13 @@ typedef struct {
     volatile int checkState;
     double padding5[CACHE_LINE_SIZE - sizeof(int) - sizeof(double)];
     int pResidue, cResidue;
-}SRMT_QUEUE;
+}WANG_QUEUE;
 
 extern int wait_var;
 extern double wait_calc;
 
 extern RHT_QUEUE globalQueue;
-extern SRMT_QUEUE srmtQueue;
+extern WANG_QUEUE wangQueue;
 
 extern double groupVarProducer;
 extern double groupVarConsumer;
@@ -123,8 +123,8 @@ static int are_both_nan(double pValue, double cValue){
     globalQueue.content[globalQueue.enqPtr] = value;                    \
     globalQueue.enqPtr = globalQueue.nextEnq;
 
-#if APPROACH_USING_POINTERS == 1 || APPROACH_ALREADY_CONSUMED == 1 || APPROACH_SRMT == 1 || APPROACH_CONSUMER_NO_SYNC == 1
-#define write_move(value) RHT_Produce_Secure(value);
+#if APPROACH_USING_POINTERS == 1 || APPROACH_ALREADY_CONSUMED == 1 || APPROACH_WANG == 1 || APPROACH_CONSUMER_NO_SYNC == 1
+#define write_move(value) RHT_Produce(value);
 
 #elif APPROACH_WRITE_INVERTED_NEW_LIMIT == 1
 #define write_move(value) write_move_inverted(value)
@@ -264,13 +264,13 @@ static int are_both_nan(double pValue, double cValue){
             consumerValue, producerValue, producerCount, consumerCount); \
     exit(1);
 
-#if APPROACH_SRMT == 1
+#if APPROACH_WANG == 1
 #define RHT_Produce_Volatile(volValue)                        \
-    srmtQueue.pResidue = UNIT - (srmtQueue.enqPtrDB % UNIT);            \
-    while(srmtQueue.pResidue-- > 0) SRMT_Produce(0);                  \
-    srmtQueue.volatileValue = volValue;                       \
-    srmtQueue.checkState = 0;\
-    while (srmtQueue.checkState == 0); //asm("pause");
+    wangQueue.pResidue = UNIT - (wangQueue.enqPtrDB % UNIT);            \
+    while(wangQueue.pResidue-- > 0) Wang_Produce(0);                  \
+    wangQueue.volatileValue = volValue;                       \
+    wangQueue.checkState = 0;\
+    while (wangQueue.checkState == 0); //asm("pause");
 #else
 #define RHT_Produce_Volatile(volValue)                          \
     globalQueue.volatileValue = volValue;                       \
@@ -278,15 +278,15 @@ static int are_both_nan(double pValue, double cValue){
     while (globalQueue.checkState == 0) asm("pause");
 #endif
 
-#if APPROACH_SRMT == 1
+#if APPROACH_WANG == 1
 #define RHT_Consume_Volatile(volValue)                        \
-    while (srmtQueue.checkState == 1);  /*asm("pause");*/           \
-    if (!fequal(volValue, srmtQueue.volatileValue)){          \
-        Report_Soft_Error(volValue, srmtQueue.volatileValue)  \
+    while (wangQueue.checkState == 1);  /*asm("pause");*/           \
+    if (!fequal(volValue, wangQueue.volatileValue)){          \
+        Report_Soft_Error(volValue, wangQueue.volatileValue)  \
     }                                                         \
-    srmtQueue.checkState = 1;                               \
-    srmtQueue.cResidue = UNIT - (srmtQueue.deqPtrDB % UNIT);            \
-    while(srmtQueue.cResidue-- > 0) SRMT_Consume();
+    wangQueue.checkState = 1;                               \
+    wangQueue.cResidue = UNIT - (wangQueue.deqPtrDB % UNIT);            \
+    while(wangQueue.cResidue-- > 0) Wang_Consume();
 #else
 #define RHT_Consume_Volatile(volValue)                          \
     while (globalQueue.checkState == 1) asm("pause");           \
@@ -320,11 +320,11 @@ static void Queue_Init() {
     globalQueue.enqPtr = globalQueue.deqPtr = consumerCount = producerCount = 0;
 }
 
-static void SRMT_Queue_Init() {
-    srmtQueue.content = (double *) (malloc(sizeof(double) * RHT_QUEUE_SIZE));
-    srmtQueue.checkState = 1;
-    srmtQueue.enqPtr = srmtQueue.enqPtrDB = srmtQueue.enqPtrLS =
-    srmtQueue.deqPtr = srmtQueue.deqPtrDB = srmtQueue.deqPtrLS = 0;
+static void Wang_Queue_Init() {
+    wangQueue.content = (double *) (malloc(sizeof(double) * RHT_QUEUE_SIZE));
+    wangQueue.checkState = 1;
+    wangQueue.enqPtr = wangQueue.enqPtrDB = wangQueue.enqPtrLS =
+    wangQueue.deqPtr = wangQueue.deqPtrDB = wangQueue.deqPtrLS = 0;
 }
 
 static void createConsumerThreads(int numThreads) {
@@ -339,17 +339,17 @@ static void createConsumerThreads(int numThreads) {
 
 static void RHT_Replication_Init(int numThreads) {
     createConsumerThreads(numThreads);
-#if APPROACH_SRMT == 1
-    SRMT_Queue_Init();
+#if APPROACH_WANG == 1
+    Wang_Queue_Init();
 #else
     Queue_Init();
 #endif
 }
 
 static void RHT_Replication_Finish() {
-#if APPROACH_SRMT == 1
-    if(srmtQueue.content)
-        free((void *) srmtQueue.content);
+#if APPROACH_WANG == 1
+    if(wangQueue.content)
+        free((void *) wangQueue.content);
 #else
     if (globalQueue.content)
         free((void *) globalQueue.content);
@@ -379,7 +379,7 @@ static INLINE void AlreadyConsumed_Produce(double value) {
     globalQueue.nextEnq = (globalQueue.enqPtr + 1) % RHT_QUEUE_SIZE;
 
     while (!fequal(globalQueue.content[globalQueue.nextEnq], ALREADY_CONSUMED)) {
-        //asm("pause");
+        asm("pause");
     }
 
     globalQueue.content[globalQueue.enqPtr] = value;
@@ -388,7 +388,7 @@ static INLINE void AlreadyConsumed_Produce(double value) {
 
 static INLINE double AlreadyConsumed_Consume() {
     while (fequal(globalQueue.content[globalQueue.deqPtr], ALREADY_CONSUMED)) {
-        //asm("pause");
+        asm("pause");
     }
 
     double value = globalQueue.content[globalQueue.deqPtr];
@@ -398,7 +398,7 @@ static INLINE double AlreadyConsumed_Consume() {
 
 static INLINE void AlreadyConsumed_Consume_Check(double currentValue) {
     while (fequal(globalQueue.content[globalQueue.deqPtr], ALREADY_CONSUMED)) {
-        //asm("pause");
+        asm("pause");
     }
 
     if (!fequal(globalQueue.content[globalQueue.deqPtr], currentValue)) {
@@ -452,50 +452,50 @@ static INLINE void UsingPointers_Consume_Check(double currentValue) {
 }
 
 
-// -------- SRMT Approach from Compiler-Managed Software-based Redundant ... paper ----------
+// -------- Wang Approach from Compiler-Managed Software-based Redundant ... paper ----------
 
-static INLINE void SRMT_Produce(double value) {
-    srmtQueue.content[srmtQueue.enqPtrDB] = value;
-    srmtQueue.enqPtrDB = (srmtQueue.enqPtrDB + 1) % RHT_QUEUE_SIZE;
+static INLINE void Wang_Produce(double value) {
+    wangQueue.content[wangQueue.enqPtrDB] = value;
+    wangQueue.enqPtrDB = (wangQueue.enqPtrDB + 1) % RHT_QUEUE_SIZE;
 
-    if(srmtQueue.enqPtrDB % UNIT == 0) {
-        while(srmtQueue.enqPtrDB == srmtQueue.deqPtrLS) {
-            srmtQueue.deqPtrLS = srmtQueue.deqPtr;
+    if(wangQueue.enqPtrDB % UNIT == 0) {
+        while(wangQueue.enqPtrDB == wangQueue.deqPtrLS) {
+            wangQueue.deqPtrLS = wangQueue.deqPtr;
             //asm("pause");
         }
-        srmtQueue.enqPtr = srmtQueue.enqPtrDB;
+        wangQueue.enqPtr = wangQueue.enqPtrDB;
     }
 }
 
-static INLINE double SRMT_Consume() {
-    if(srmtQueue.deqPtrDB % UNIT == 0) {
-        srmtQueue.deqPtr = srmtQueue.deqPtrDB;
-        while(srmtQueue.deqPtrDB == srmtQueue.enqPtrLS) {
-            srmtQueue.enqPtrLS = srmtQueue.enqPtr;
+static INLINE double Wang_Consume() {
+    if(wangQueue.deqPtrDB % UNIT == 0) {
+        wangQueue.deqPtr = wangQueue.deqPtrDB;
+        while(wangQueue.deqPtrDB == wangQueue.enqPtrLS) {
+            wangQueue.enqPtrLS = wangQueue.enqPtr;
             //asm("pause");
         }
     }
 
-    double data = srmtQueue.content[srmtQueue.deqPtrDB];
-    srmtQueue.deqPtrDB = (srmtQueue.deqPtrDB + 1) % RHT_QUEUE_SIZE;
+    double data = wangQueue.content[wangQueue.deqPtrDB];
+    wangQueue.deqPtrDB = (wangQueue.deqPtrDB + 1) % RHT_QUEUE_SIZE;
     return data;
 }
 
-static INLINE void SRMT_Consume_Check(double currentValue) {
-    if(srmtQueue.deqPtrDB % UNIT == 0) {
-        srmtQueue.deqPtr = srmtQueue.deqPtrDB;
+static INLINE void Wang_Consume_Check(double currentValue) {
+    if(wangQueue.deqPtrDB % UNIT == 0) {
+        wangQueue.deqPtr = wangQueue.deqPtrDB;
 
-        while(srmtQueue.deqPtrDB == srmtQueue.enqPtrLS) {
-            srmtQueue.enqPtrLS = srmtQueue.enqPtr;
+        while(wangQueue.deqPtrDB == wangQueue.enqPtrLS) {
+            wangQueue.enqPtrLS = wangQueue.enqPtr;
             //asm("pause");
         }
     }
 
-    if (!fequal(srmtQueue.content[srmtQueue.deqPtrDB], currentValue)) {
-        Report_Soft_Error(currentValue, srmtQueue.content[srmtQueue.deqPtrDB])
+    if (!fequal(wangQueue.content[wangQueue.deqPtrDB], currentValue)) {
+        Report_Soft_Error(currentValue, wangQueue.content[wangQueue.deqPtrDB])
     }
 
-    srmtQueue.deqPtrDB = (srmtQueue.deqPtrDB + 1) % RHT_QUEUE_SIZE;
+    wangQueue.deqPtrDB = (wangQueue.deqPtrDB + 1) % RHT_QUEUE_SIZE;
 }
 
 
@@ -576,10 +576,6 @@ static INLINE void NewLimit_Produce(double value) {
 
 // -------- Write Inverted New Limit Approach ----------
 
-static INLINE void WriteInvertedNewLimit_Produce(double value) {
-    write_move_inverted(value)
-}
-
 static INLINE void WriteInverted_Produce_Secure(double value){
     calc_new_distance(globalQueue.newLimit)
 
@@ -592,7 +588,6 @@ static INLINE void WriteInverted_Produce_Secure(double value){
 }
 
 //////////// 'PUBLIC' QUEUE METHODS //////////////////
-void RHT_Produce_Secure(double value);
 void RHT_Produce(double value);
 void RHT_Consume_Check(double currentValue);
 double RHT_Consume();
