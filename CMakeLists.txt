@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.9)
 project(miniXyceRHT)
 
 set(CMAKE_BUILD_TYPE Release) # optimizations, but debuging is not allowed
@@ -16,35 +16,30 @@ set(CMAKE_CXX_STANDARD 11)
 #-ftree-vectorize
 
 # mpi or not
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHAVE_MPI -DMPICH_IGNORE_CXX_SEEK")
-
-# print output to console and files
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DPRINT_OUTPUT=0")
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHAVE_MPI -DMPICH_IGNORE_CXX_SEEK")
 
 # fast math or not, there is a problem when nan values are found when this options is enabled
 # set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffast-math")
 
 # General compilation flags
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -funroll-all-loops") #just for gcc
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DMINIXYCE_INFO=1")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DBRANCH_HINT=1") # should always be true
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DCOUNT_QUEUE_DESYNC=0")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DAPPROACH_NEW_ENQ_INDEX=0") # use with APPROACH_NEW_LIMIT
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DPERCENTAGE_OF_REPLICATION=0")
-
-set(FLAGS_CURRENT "${CMAKE_CXX_FLAGS}")
+add_definitions(-DUSING_MPI -lm)
+add_definitions(-ftree-vectorize -flto -funroll-all-loops -mavx2)
+add_definitions(-DMINIXYCE_INFO=1-DPRINT_OUTPUT=0 -DPERCENTAGE_OF_REPLICATION=0)
+add_definitions(-DBRANCH_HINT=1 -DCOUNT_QUEUE_DESYNC=0 -DAPPROACH_NEW_ENQ_INDEX=0)
 
 # These are other approaches of the literature
-set(FLAGS_CURRENT "${FLAGS_CURRENT} -DAPPROACH_USING_POINTERS=0")
-set(FLAGS_CURRENT "${FLAGS_CURRENT} -DAPPROACH_ALREADY_CONSUMED=0")
-set(FLAGS_CURRENT "${FLAGS_CURRENT} -DAPPROACH_WANG=1")
+add_definitions(-DAPPROACH_USING_POINTERS=0)
+add_definitions(-DAPPROACH_ALREADY_CONSUMED=0)
+add_definitions(-DAPPROACH_WANG=0)
 
 # These are our approaches
-set(FLAGS_CURRENT "${FLAGS_CURRENT} -DAPPROACH_CONSUMER_NO_SYNC=0")
-set(FLAGS_CURRENT "${FLAGS_CURRENT} -DAPPROACH_NEW_LIMIT=0") # new limit includes the consumer no sync
-set(FLAGS_CURRENT "${FLAGS_CURRENT} -DAPPROACH_WRITE_INVERTED_NEW_LIMIT=0")
-set(FLAGS_CURRENT "${FLAGS_CURRENT} -DVAR_GROUPING=0") # it can be used with any of the below approaches
+add_definitions(-DAPPROACH_CONSUMER_NO_SYNC=0)
+add_definitions(-DAPPROACH_NEW_LIMIT=1)
+add_definitions(-DAPPROACH_WRITE_INVERTED_NEW_LIMIT=0)
+add_definitions(-DVAR_GROUPING=1) # it can be used with any of the below approaches
 
+#Init flags current
+set(FLAGS_CURRENT "anything")
 
 set(SOURCE_FILES
         miniXyce_ref/mX_source.cpp miniXyce_ref/mX_linear_ckt_simulator.cpp
@@ -59,9 +54,13 @@ set(SOURCE_FILES
         miniXyce_ref/RHT.cpp miniXyce_ref/RHT.h
         )
 
-function(createExecutable exeName compFlags)
+function(createExecutable exeName compFlags varFlag)
     add_executable(${exeName} ${SOURCE_FILES})
     set_target_properties(${exeName} PROPERTIES COMPILE_FLAGS "${compFlags}")
+    set_property(TARGET ${exeName} APPEND PROPERTY COMPILE_DEFINITIONS ${compFlags})
+    if(varFlag)
+        set_property(TARGET ${exeName} APPEND PROPERTY COMPILE_DEFINITIONS "VAR_GROUPING=1")
+    endif()
     target_link_libraries(${exeName} ${MPI_LIBRARIES})
     target_link_libraries(${exeName} pthread)
     target_link_libraries(${exeName} m) #math
@@ -76,56 +75,52 @@ endfunction(createExecutable)
 
 
 #current, for testing
-createExecutable("miniXyce-Current" ${FLAGS_CURRENT})
+createExecutable("miniXyce-Current" ${FLAGS_CURRENT} 0)
 
 # using pointer flags
-set(FLAGS_USING_POINTERS "${CMAKE_CXX_FLAGS} -DAPPROACH_USING_POINTERS=1")
-set(FLAGS_USING_POINTERS_VG " ${FLAGS_USING_POINTERS} -DVAR_GROUPING=1")
+
+set(FLAGS_USING_POINTERS "APPROACH_USING_POINTERS=1")
+set(FLAGS_USING_POINTERS_VG "${FLAGS_USING_POINTERS};VAR_GROUPING=1")
 
 # using already consumed value flags
-set(FLAGS_ALREADY_CONSUMED "${CMAKE_CXX_FLAGS} -DAPPROACH_ALREADY_CONSUMED=1")
-set(FLAGS_ALREADY_CONSUMED_VG " ${FLAGS_ALREADY_CONSUMED} -DVAR_GROUPING=1")
+set(FLAGS_ALREADY_CONSUMED "APPROACH_ALREADY_CONSUMED=1")
 
-# using SRMT value flags
-set(FLAGS_SRMT "${CMAKE_CXX_FLAGS} -DAPPROACH_WANG=1")
-set(FLAGS_SRMT_VG " ${FLAGS_SRMT} -DVAR_GROUPING=1")
+# using WANG value flags
+set(FLAGS_WANG "APPROACH_WANG=1")
 
 # using no sync consumer approachh
-set(FLAGS_NO_SYNC_CONSUMER "${CMAKE_CXX_FLAGS} -DAPPROACH_CONSUMER_NO_SYNC=1")
-set(FLAGS_NO_SYNC_CONSUMER_VG " ${FLAGS_NO_SYNC_CONSUMER} -DVAR_GROUPING=1")
+set(FLAGS_NO_SYNC_CONSUMER "APPROACH_CONSUMER_NO_SYNC=1")
 
 # using new limit approach (includes the previous)
-set(FLAGS_NEW_LIMIT "${CMAKE_CXX_FLAGS} -DAPPROACH_NEW_LIMIT=1")
-set(FLAGS_NEW_LIMIT_VG " ${FLAGS_NEW_LIMIT} -DVAR_GROUPING=1")
+set(FLAGS_NEW_LIMIT "APPROACH_NEW_LIMIT=1")
 
 # using new limit write inverted approach
-set(FLAGS_NEW_LIMIT_INVERTED "${CMAKE_CXX_FLAGS} -DAPPROACH_WRITE_INVERTED_NEW_LIMIT=1")
-set(FLAGS_NEW_LIMIT_INVERTED_VG " ${FLAGS_NEW_LIMIT_INVERTED} -DVAR_GROUPING=1")
+set(FLAGS_NEW_LIMIT_INVERTED "APPROACH_WRITE_INVERTED_NEW_LIMIT=1")
 
 # un comment the next lines to create multiple executables, with different configurations
 #using pointers
-#createExecutable("miniXyce-UP" ${FLAGS_USING_POINTERS})
-#createExecutable("miniXyce-UP-VG" ${FLAGS_USING_POINTERS_VG})
+#createExecutable("miniXyce-UP" ${FLAGS_USING_POINTERS} 0)
+#createExecutable("miniXyce-UP-VG" ${FLAGS_USING_POINTERS} 1)
 
 # already consumed
-#createExecutable("miniXyce-AC" ${FLAGS_ALREADY_CONSUMED})
-#createExecutable("miniXyce-AC-VG" ${FLAGS_ALREADY_CONSUMED_VG})
+#createExecutable("miniXyce-AC" ${FLAGS_ALREADY_CONSUMED} 0)
+#createExecutable("miniXyce-AC-VG" ${FLAGS_ALREADY_CONSUMED} 1)
 
-# SRMT
-#createExecutable("miniXyce-SRMT" ${FLAGS_SRMT})
-#createExecutable("miniXyce-SRMT-VG" ${FLAGS_SRMT_VG})
+# WANG
+#createExecutable("miniXyce-Wang" ${FLAGS_WANG} 0)
+#createExecutable("miniXyce-SRMT-VG" ${FLAGS_SRMT} 1)
 
 # no sync consumer
-#createExecutable("miniXyce-NSC" ${FLAGS_NO_SYNC_CONSUMER})
-#createExecutable("miniXyce-NSC-VG" ${FLAGS_NO_SYNC_CONSUMER_VG})
+#createExecutable("miniXyce-NSC" ${FLAGS_NO_SYNC_CONSUMER} 0)
+#createExecutable("miniXyce-NSC-VG" ${FLAGS_NO_SYNC_CONSUMER} 1)
 
 # new limit
-#createExecutable("miniXyce-NL" ${FLAGS_NEW_LIMIT})
-#createExecutable("miniXyce-NL-VG" ${FLAGS_NEW_LIMIT_VG})
+#createExecutable("miniXyce-NL" ${FLAGS_NEW_LIMIT} 0)
+#createExecutable("miniXyce-NL-VG" ${FLAGS_NEW_LIMIT} 1)
 
 # new limit inverted
-#createExecutable("miniXyce-NLI" ${FLAGS_NEW_LIMIT_INVERTED})
-#createExecutable("miniXyce-NLI-VG" ${FLAGS_NEW_LIMIT_INVERTED_VG})
+#createExecutable("miniXyce-NLI" ${FLAGS_NEW_LIMIT_INVERTED} 0)
+#createExecutable("miniXyce-NLI-VG" ${FLAGS_NEW_LIMIT_INVERTED} 1)
 
 # Best approach
-#createExecutable("miniXyce-RHT" ${FLAGS_NEW_LIMIT_VG})
+#createExecutable("miniXyce-RHT" ${FLAGS_NEW_LIMIT} 1)

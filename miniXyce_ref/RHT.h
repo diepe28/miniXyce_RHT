@@ -32,17 +32,17 @@
 
 typedef struct {
     volatile int deqPtr;
-    double padding0[CACHE_LINE_SIZE - sizeof(int)];
+    double padding0[31];
     volatile int enqPtr;
-    double padding1[CACHE_LINE_SIZE - sizeof(int)];
+    double padding1[31];
     volatile double *content;
-    double padding2[CACHE_LINE_SIZE - sizeof(double *)];
+    double padding2[31];
     volatile double volatileValue;
     volatile int checkState;
-    double padding3[CACHE_LINE_SIZE - sizeof(int) - sizeof(double)];
+    double padding3[30];
     // Producer Local, does not make any diff compared to having them outside of the queue
     int nextEnq, localDeq, newLimit, diff;
-    double padding4[CACHE_LINE_SIZE - 4 * sizeof(int)];
+    double padding4[30];
     // Consumer Local
     double otherValue, thisValue;
 }RHT_QUEUE;
@@ -50,20 +50,21 @@ typedef struct {
 #define UNIT 8
 typedef struct {
     volatile int deqPtr;
-    double padding0[CACHE_LINE_SIZE - sizeof(int) * 1];
+    double padding0[31];
     volatile int deqPtrDB, enqPtrLS;
-    double padding1[CACHE_LINE_SIZE - sizeof(int) * 2];
+    double padding1[31];
     volatile int enqPtr;
-    double padding2[CACHE_LINE_SIZE - sizeof(int) * 1];
+    double padding2[31];
     volatile int enqPtrDB, deqPtrLS;
-    double padding3[CACHE_LINE_SIZE - sizeof(int) * 2];
+    double padding3[31];
     volatile double *content;
-    double padding4[CACHE_LINE_SIZE - sizeof(double *)];
+    double padding4[31];
     volatile double volatileValue;
     volatile int checkState;
-    double padding5[CACHE_LINE_SIZE - sizeof(int) - sizeof(double)];
+    double padding5[30];
     int pResidue, cResidue;
 }WANG_QUEUE;
+
 
 extern int wait_var;
 extern double wait_calc;
@@ -566,12 +567,6 @@ static INLINE void NoSyncConsumer_Consume_Check(double currentValue) {
     }
 
     Report_Soft_Error(currentValue, globalQueue.otherValue)
-}
-
-
-// -------- New Limit Approach ----------
-static INLINE void NewLimit_Produce(double value) {
-    write_move_normal(value)
 }
 
 // -------- Write Inverted New Limit Approach ----------

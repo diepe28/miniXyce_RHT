@@ -125,6 +125,8 @@ int main(int argc, char* argv[]) {
         printf("New limit");
 #elif APPROACH_WRITE_INVERTED_NEW_LIMIT == 1
         printf("New limit write inverted");
+#elif APPROACH_WANG == 1
+        printf("Wang");
 #endif
 
 #if VAR_GROUPING == 1
