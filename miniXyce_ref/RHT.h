@@ -48,14 +48,17 @@ typedef struct {
 }RHT_QUEUE;
 
 #define UNIT 8
+#define CONSUMER_UNIT 32
+
 typedef struct {
     volatile int deqPtr;
+    //int cResidue;
     double padding0[31];
-    volatile int deqPtrDB, enqPtrLS;
+    int deqPtrLocal, enqPtrCached;
     double padding1[31];
     volatile int enqPtr;
     double padding2[31];
-    volatile int enqPtrDB, deqPtrLS;
+    int enqPtrLocal, deqPtrCached;
     double padding3[31];
     volatile double *content;
     double padding4[31];
@@ -266,11 +269,11 @@ static int are_both_nan(double pValue, double cValue){
     exit(1);
 
 #if APPROACH_WANG == 1
-#define RHT_Produce_Volatile(volValue)                        \
-    wangQueue.pResidue = UNIT - (wangQueue.enqPtrDB % UNIT);            \
-    while(wangQueue.pResidue-- > 0) Wang_Produce(0);                  \
-    wangQueue.volatileValue = volValue;                       \
-    wangQueue.checkState = 0;\
+#define RHT_Produce_Volatile(volValue)                              \
+    wangQueue.pResidue = UNIT - (wangQueue.enqPtrLocal % UNIT);     \
+    while(wangQueue.pResidue-- > 0) Wang_Produce(0);                \
+    wangQueue.volatileValue = volValue;                             \
+    wangQueue.checkState = 0;                                       \
     while (wangQueue.checkState == 0); //asm("pause");
 #else
 #define RHT_Produce_Volatile(volValue)                          \
@@ -280,13 +283,13 @@ static int are_both_nan(double pValue, double cValue){
 #endif
 
 #if APPROACH_WANG == 1
-#define RHT_Consume_Volatile(volValue)                        \
+#define RHT_Consume_Volatile(volValue)                              \
     while (wangQueue.checkState == 1);  /*asm("pause");*/           \
-    if (!fequal(volValue, wangQueue.volatileValue)){          \
-        Report_Soft_Error(volValue, wangQueue.volatileValue)  \
-    }                                                         \
-    wangQueue.checkState = 1;                               \
-    wangQueue.cResidue = UNIT - (wangQueue.deqPtrDB % UNIT);            \
+    if (!fequal(volValue, wangQueue.volatileValue)){                \
+        Report_Soft_Error(volValue, wangQueue.volatileValue)        \
+    }                                                               \
+    wangQueue.checkState = 1;                                       \
+    wangQueue.cResidue = UNIT - (wangQueue.deqPtrLocal % UNIT);     \
     while(wangQueue.cResidue-- > 0) Wang_Consume();
 #else
 #define RHT_Consume_Volatile(volValue)                          \
@@ -324,8 +327,8 @@ static void Queue_Init() {
 static void Wang_Queue_Init() {
     wangQueue.content = (double *) (malloc(sizeof(double) * RHT_QUEUE_SIZE));
     wangQueue.checkState = 1;
-    wangQueue.enqPtr = wangQueue.enqPtrDB = wangQueue.enqPtrLS =
-    wangQueue.deqPtr = wangQueue.deqPtrDB = wangQueue.deqPtrLS = 0;
+    wangQueue.enqPtr = wangQueue.enqPtrLocal = wangQueue.enqPtrCached =
+    wangQueue.deqPtr = wangQueue.deqPtrLocal = wangQueue.deqPtrCached = 0;
 }
 
 static void createConsumerThreads(int numThreads) {
@@ -456,47 +459,67 @@ static INLINE void UsingPointers_Consume_Check(double currentValue) {
 // -------- Wang Approach from Compiler-Managed Software-based Redundant ... paper ----------
 
 static INLINE void Wang_Produce(double value) {
-    wangQueue.content[wangQueue.enqPtrDB] = value;
-    wangQueue.enqPtrDB = (wangQueue.enqPtrDB + 1) % RHT_QUEUE_SIZE;
+    wangQueue.content[wangQueue.enqPtrLocal] = value;
+    wangQueue.enqPtrLocal = (wangQueue.enqPtrLocal + 1) % RHT_QUEUE_SIZE;
 
-    if(wangQueue.enqPtrDB % UNIT == 0) {
-        while(wangQueue.enqPtrDB == wangQueue.deqPtrLS) {
-            wangQueue.deqPtrLS = wangQueue.deqPtr;
-            //asm("pause");
+    if(wangQueue.enqPtrLocal % UNIT == 0) {
+        // While were at the limit, we update the cached deqPtr
+        while(wangQueue.enqPtrLocal == wangQueue.deqPtrCached) {
+            wangQueue.deqPtrCached = wangQueue.deqPtr;
+            asm("pause");
         }
-        wangQueue.enqPtr = wangQueue.enqPtrDB;
+        wangQueue.enqPtr = wangQueue.enqPtrLocal;
     }
 }
 
 static INLINE double Wang_Consume() {
-    if(wangQueue.deqPtrDB % UNIT == 0) {
-        wangQueue.deqPtr = wangQueue.deqPtrDB;
-        while(wangQueue.deqPtrDB == wangQueue.enqPtrLS) {
-            wangQueue.enqPtrLS = wangQueue.enqPtr;
+    if(wangQueue.deqPtrLocal % UNIT == 0) {
+        wangQueue.deqPtr = wangQueue.deqPtrLocal;
+        // While were at the limit, we update the cached enqPtr
+        while(wangQueue.deqPtrLocal == wangQueue.enqPtrCached) {
+            wangQueue.enqPtrCached = wangQueue.enqPtr;
             //asm("pause");
         }
     }
 
-    double data = wangQueue.content[wangQueue.deqPtrDB];
-    wangQueue.deqPtrDB = (wangQueue.deqPtrDB + 1) % RHT_QUEUE_SIZE;
+    double data = wangQueue.content[wangQueue.deqPtrLocal];
+    wangQueue.deqPtrLocal = (wangQueue.deqPtrLocal + 1) % RHT_QUEUE_SIZE;
     return data;
 }
 
 static INLINE void Wang_Consume_Check(double currentValue) {
-    if(wangQueue.deqPtrDB % UNIT == 0) {
-        wangQueue.deqPtr = wangQueue.deqPtrDB;
+    if(wangQueue.deqPtrLocal % UNIT == 0) {
+        wangQueue.deqPtr = wangQueue.deqPtrLocal;
 
-        while(wangQueue.deqPtrDB == wangQueue.enqPtrLS) {
-            wangQueue.enqPtrLS = wangQueue.enqPtr;
+        // While were at the limit, we update the cached enqPtr
+        while(wangQueue.deqPtrLocal == wangQueue.enqPtrCached) {
+            wangQueue.enqPtrCached = wangQueue.enqPtr;
             //asm("pause");
         }
     }
 
-    if (!fequal(wangQueue.content[wangQueue.deqPtrDB], currentValue)) {
-        Report_Soft_Error(currentValue, wangQueue.content[wangQueue.deqPtrDB])
+    if (!fequal(wangQueue.content[wangQueue.deqPtrLocal], currentValue)) {
+        Report_Soft_Error(currentValue, wangQueue.content[wangQueue.deqPtrLocal])
     }
 
-    wangQueue.deqPtrDB = (wangQueue.deqPtrDB + 1) % RHT_QUEUE_SIZE;
+    wangQueue.deqPtrLocal = (wangQueue.deqPtrLocal + 1) % RHT_QUEUE_SIZE;
+}
+
+static INLINE void Wang_Consume_Improved(double currentValue) {
+    if(wangQueue.deqPtrLocal % UNIT == 0) {
+        wangQueue.deqPtr = wangQueue.deqPtrLocal;
+
+        while(wangQueue.deqPtrLocal == wangQueue.enqPtrCached) {
+            wangQueue.enqPtrCached = wangQueue.enqPtr;
+            //asm("pause");
+        }
+    }
+
+    if (!fequal(wangQueue.content[wangQueue.deqPtrLocal], currentValue)) {
+        Report_Soft_Error(currentValue, wangQueue.content[wangQueue.deqPtrLocal])
+    }
+
+    wangQueue.deqPtrLocal = (wangQueue.deqPtrLocal + 1) % RHT_QUEUE_SIZE;
 }
 
 
