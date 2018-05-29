@@ -47,12 +47,10 @@ typedef struct {
     double otherValue, thisValue;
 }RHT_QUEUE;
 
-#define UNIT 8
-#define CONSUMER_UNIT 32
+#define UNIT 16
 
 typedef struct {
     volatile int deqPtr;
-    //int cResidue;
     double padding0[31];
     int deqPtrLocal, enqPtrCached;
     double padding1[31];
@@ -268,8 +266,10 @@ static int are_both_nan(double pValue, double cValue){
             consumerValue, producerValue, producerCount, consumerCount); \
     exit(1);
 
-#if APPROACH_WANG == 1
-#define RHT_Produce_Volatile(volValue)                              \
+#if SKIP_VOLATILE == 1
+#define RHT_Produce_Volatile(volValue);
+#elif APPROACH_WANG == 1
+#define RHT_Produce_Volatile(volValue) /*producerCount++;*/                              \
     wangQueue.pResidue = UNIT - (wangQueue.enqPtrLocal % UNIT);     \
     while(wangQueue.pResidue-- > 0) Wang_Produce(0);                \
     wangQueue.volatileValue = volValue;                             \
@@ -282,8 +282,10 @@ static int are_both_nan(double pValue, double cValue){
     while (globalQueue.checkState == 0) asm("pause");
 #endif
 
-#if APPROACH_WANG == 1
-#define RHT_Consume_Volatile(volValue)                              \
+#if SKIP_VOLATILE == 1
+#define RHT_Consume_Volatile(volValue);
+#elif APPROACH_WANG == 1
+#define RHT_Consume_Volatile(volValue) /*consumerCount++;*/         \
     while (wangQueue.checkState == 1);  /*asm("pause");*/           \
     if (!fequal(volValue, wangQueue.volatileValue)){                \
         Report_Soft_Error(volValue, wangQueue.volatileValue)        \
@@ -329,20 +331,10 @@ static void Wang_Queue_Init() {
     wangQueue.checkState = 1;
     wangQueue.enqPtr = wangQueue.enqPtrLocal = wangQueue.enqPtrCached =
     wangQueue.deqPtr = wangQueue.deqPtrLocal = wangQueue.deqPtrCached = 0;
+    consumerCount = producerCount = 0;
 }
 
-static void createConsumerThreads(int numThreads) {
-    int i;
-
-    consumerThreadCount = numThreads;
-    //consumerThreads = (pthread_t **) malloc(sizeof(pthread_t *) * consumerThreadCount);
-
-    //for (i = 0; i < consumerThreadCount; i++)
-    //consumerThreads[i] = (pthread_t *) malloc(sizeof(pthread_t));
-}
-
-static void RHT_Replication_Init(int numThreads) {
-    createConsumerThreads(numThreads);
+static void RHT_Replication_Init() {
 #if APPROACH_WANG == 1
     Wang_Queue_Init();
 #else
@@ -358,11 +350,6 @@ static void RHT_Replication_Finish() {
     if (globalQueue.content)
         free((void *) globalQueue.content);
 #endif
-
-    //int i = 0;
-//    for (i = 0; i < consumerThreadCount; i++)
-//        free(consumerThreads[i]);
-//    free(consumerThreads);
 }
 
 //////////// INTERNAL QUEUE METHODS BODY //////////////////
@@ -464,9 +451,10 @@ static INLINE void Wang_Produce(double value) {
 
     if(wangQueue.enqPtrLocal % UNIT == 0) {
         // While were at the limit, we update the cached deqPtr
+//        if(wangQueue.enqPtrLocal == wangQueue.deqPtrCached) producerCount++;
         while(wangQueue.enqPtrLocal == wangQueue.deqPtrCached) {
             wangQueue.deqPtrCached = wangQueue.deqPtr;
-            asm("pause");
+//            asm("pause");
         }
         wangQueue.enqPtr = wangQueue.enqPtrLocal;
     }
@@ -476,6 +464,7 @@ static INLINE double Wang_Consume() {
     if(wangQueue.deqPtrLocal % UNIT == 0) {
         wangQueue.deqPtr = wangQueue.deqPtrLocal;
         // While were at the limit, we update the cached enqPtr
+        // if(wangQueue.deqPtrLocal == wangQueue.enqPtrCached) consumerCount++;
         while(wangQueue.deqPtrLocal == wangQueue.enqPtrCached) {
             wangQueue.enqPtrCached = wangQueue.enqPtr;
             //asm("pause");
@@ -492,6 +481,7 @@ static INLINE void Wang_Consume_Check(double currentValue) {
         wangQueue.deqPtr = wangQueue.deqPtrLocal;
 
         // While were at the limit, we update the cached enqPtr
+//        if(wangQueue.deqPtrLocal == wangQueue.enqPtrCached) consumerCount++;
         while(wangQueue.deqPtrLocal == wangQueue.enqPtrCached) {
             wangQueue.enqPtrCached = wangQueue.enqPtr;
             //asm("pause");

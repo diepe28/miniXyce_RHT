@@ -170,7 +170,7 @@ int main(int argc, char* argv[]) {
         ConsumerParams *consumerParams;
 
         for (int iterator = 0; iterator < numRuns; iterator++) {
-            RHT_Replication_Init(numThreads);
+            RHT_Replication_Init();
             consumerParams = new ConsumerParams();
 
             consumerParams->pid = pid;
@@ -904,6 +904,11 @@ double main_execution_replicated(int p, int pid, int n, int argc, char* argv[]) 
     // Clean up
     mX_linear_DAE_utils::destroy(dae);
 
+#if APPROACH_WANG == 1
+    // done replication but UNIT might not have been reached
+    wangQueue.enqPtr = wangQueue.enqPtrLocal;
+#endif
+
 #if PERCENTAGE_OF_REPLICATION == 1
     //dperez, this is where all execution ends
     if(pid == 0) {
@@ -1194,7 +1199,7 @@ void stressTest_queue(){
     consumerArgs[1] = consumerCore;
 
     for(int i = 0; i < numTests; i++){
-        RHT_Replication_Init(numThreads);
+        RHT_Replication_Init();
 
         pthread_t myThread;
 
