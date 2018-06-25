@@ -193,7 +193,8 @@ int main(int argc, char* argv[]) {
             pthread_join(myThread, NULL);
 
             if (pid == 0) {
-                printf("Actual Walltime[%d] in seconds: %f \n", iterator,  currentElapsed);
+                printf("Actual Walltime[%d] in seconds: %f, pCount: %ld vs cCount: %ld \n",
+                       iterator,  currentElapsed, producerCount, consumerCount);
                 times += currentElapsed;
             }
 
@@ -567,30 +568,27 @@ double main_execution_replicated(int p, int pid, int n, int argc, char* argv[]) 
     doc.add("Netlist_file", ckt_netlist_filename.c_str());
 
     int total_devices = num_voltage_sources + num_current_sources + num_resistors + num_capacitors + num_inductors;
-    /*-- RHT -- */ RHT_Produce_Volatile(total_devices);
+    /*-- RHT -- */ RHT_Produce(total_devices);
+    /*-- RHT -- */ RHT_Produce(num_resistors);
+    /*-- RHT -- */ RHT_Produce(num_inductors);
+    /*-- RHT -- */ RHT_Produce(num_capacitors);
+    /*-- RHT -- */ RHT_Produce(num_voltage_sources);
+    /*-- RHT -- */ RHT_Produce_Volatile(num_current_sources);
+
 
     doc.add("Circuit_attributes", "");
     doc.get("Circuit_attributes")->add("Number_of_devices", total_devices);
-    if (num_resistors > 0) {
-        /*-- RHT -- */ RHT_Produce_Volatile(num_resistors);
+    if (num_resistors > 0)
         doc.get("Circuit_attributes")->add("Resistors_(R)", num_resistors);
-    }
-    if (num_inductors > 0) {
-        /*-- RHT -- */ RHT_Produce_Volatile(num_inductors);
+    if (num_inductors > 0)
         doc.get("Circuit_attributes")->add("Inductors_(L)", num_inductors);
-    }
-    if (num_capacitors > 0) {
-        /*-- RHT -- */ RHT_Produce_Volatile(num_capacitors);
+    if (num_capacitors > 0)
         doc.get("Circuit_attributes")->add("Capacitors_(C)", num_capacitors);
-    }
-    if (num_voltage_sources > 0) {
-        /*-- RHT -- */ RHT_Produce_Volatile(num_voltage_sources);
+    if (num_voltage_sources > 0)
         doc.get("Circuit_attributes")->add("Voltage_sources_(V)", num_voltage_sources);
-    }
-    if (num_current_sources > 0) {
-        /*-- RHT -- */ RHT_Produce_Volatile(num_current_sources);
+    if (num_current_sources > 0)
         doc.get("Circuit_attributes")->add("Current_sources_(I)", num_current_sources);
-    }
+
 
     int num_my_rows = dae->A->end_row - dae->A->start_row + 1;
     /*-- RHT -- */ RHT_Produce(num_my_rows);
@@ -644,12 +642,12 @@ double main_execution_replicated(int p, int pid, int n, int argc, char* argv[]) 
     if (!init_cond_specified) {
         std::vector<double> init_cond_guess;
 
-        /*-- RHT -- */ RHT_Produce(num_my_rows);
+        /*-- RHT -- */ RHT_Produce_NoCheck(num_my_rows);
         for (int i = 0; i < num_my_rows; i++) {
             init_cond_guess.push_back((double) (0));
         }
 
-        /*-- RHT -- */ RHT_Produce(t_start);
+        /*-- RHT -- */ RHT_Produce_NoCheck(t_start);
         /*-- RHT -- */ std::vector<double> init_RHS = evaluate_b_producer(t_start, dae);
         /*-- RHT -- */ gmres_producer(dae->A, init_RHS, init_cond_guess, tol, res, k, init_cond, iters, restarts);
 
@@ -948,27 +946,12 @@ void consumer_thread_func(void *args) {
     // document circuit and matrix attributes
     int total_devices = num_voltage_sources + num_current_sources + num_resistors + num_capacitors + num_inductors;
 
-    RHT_Consume_Volatile((double)total_devices);
-
-    if (num_resistors > 0) {
-        RHT_Consume_Volatile((double)num_resistors);
-    }
-
-    if (num_inductors > 0) {
-        RHT_Consume_Volatile((double)num_inductors);
-    }
-
-    if (num_capacitors > 0) {
-        RHT_Consume_Volatile((double)num_capacitors);
-    }
-
-    if (num_voltage_sources > 0) {
-        RHT_Consume_Volatile((double)num_voltage_sources);
-    }
-
-    if (num_current_sources > 0) {
-        RHT_Consume_Volatile((double)num_current_sources);
-    }
+    RHT_Consume_Check((double)total_devices);
+    RHT_Consume_Check((double)num_resistors);
+    RHT_Consume_Check((double)num_inductors);
+    RHT_Consume_Check((double)num_capacitors);
+    RHT_Consume_Check((double)num_voltage_sources);
+    RHT_Consume_Volatile((double)num_current_sources);
 
     int num_my_rows = dae->A->end_row - dae->A->start_row + 1;
     /*-- RHT -- */ RHT_Consume_Check((double)num_my_rows);

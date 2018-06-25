@@ -30,13 +30,14 @@ add_definitions(-DBRANCH_HINT=1 -DCOUNT_QUEUE_DESYNC=0 -DAPPROACH_NEW_ENQ_INDEX=
 # These are other approaches of the literature
 add_definitions(-DAPPROACH_USING_POINTERS=0)
 add_definitions(-DAPPROACH_ALREADY_CONSUMED=0)
-add_definitions(-DAPPROACH_WANG=1)
+add_definitions(-DAPPROACH_WANG=0)
 
 # These are our approaches
+add_definitions(-DAPPROACH_MIX_WANG=1)
 add_definitions(-DAPPROACH_CONSUMER_NO_SYNC=0)
 add_definitions(-DAPPROACH_NEW_LIMIT=0)
 add_definitions(-DAPPROACH_WRITE_INVERTED_NEW_LIMIT=0)
-add_definitions(-DVAR_GROUPING=0) # it can be used with any of the below approaches
+add_definitions(-DVAR_GROUPING=1) # it can be used with any of the below approaches
 
 #Init flags current
 set(FLAGS_CURRENT "anything")
@@ -99,6 +100,9 @@ set(FLAGS_NEW_LIMIT "APPROACH_NEW_LIMIT=1")
 # using new limit write inverted approach
 set(FLAGS_NEW_LIMIT_INVERTED "APPROACH_WRITE_INVERTED_NEW_LIMIT=1")
 
+# using mix-wang approach
+set(FLAGS_MIX_WANG "APPROACH_MIX_WANG=1")
+
 # un comment the next lines to create multiple executables, with different configurations
 #using pointers
 #createExecutable("miniXyce-UP" ${FLAGS_USING_POINTERS} 0)
@@ -123,6 +127,10 @@ set(FLAGS_NEW_LIMIT_INVERTED "APPROACH_WRITE_INVERTED_NEW_LIMIT=1")
 # new limit inverted
 #createExecutable("miniXyce-NLI" ${FLAGS_NEW_LIMIT_INVERTED} 0)
 #createExecutable("miniXyce-NLI-VG" ${FLAGS_NEW_LIMIT_INVERTED} 1)
+
+# # mix wang approach
+#createExecutable("miniXyce-MIX" ${FLAGS_MIX_WANG} 0)
+# #createExecutable("miniXyce-MIX-VG" ${FLAGS_MIX_WANG} 1)
 
 # Best approach
 #createExecutable("miniXyce-RHT" ${FLAGS_NEW_LIMIT} 1)

@@ -5,8 +5,8 @@
 // -D CMAKE_C_COMPILER=/usr/bin/clang-5.0 -D CMAKE_CXX_COMPILER=/usr/bin/clang++-5.0
 // -D CMAKE_C_COMPILER=/usr/bin/gcc-7 -D CMAKE_CXX_COMPILER=/usr/bin/g++-7
 // gcc -O3 -Q --help=optimizers, to list the optimizations enabled
-//./toplev.py --long-desc --user mpirun -np 1 /home/diego/Documents/workspace/HPCCG-RHT/cmake-build-debug/HPCCG_RHT 70 70 40 1 1 3
-
+//./toplev.py --long-desc --user mpirun -np 1 /home/diego/Documents/workspace/HPCCG-RHT/cmake-build-debug/HPCCG-current 70 70 40 5 2 1 3
+//sudo gedit /proc/sys/kernel/nmi_watchdog
 #ifndef HPCCG_1_0_SYNCQUEUE_H
 #define HPCCG_1_0_SYNCQUEUE_H
 
@@ -16,15 +16,16 @@
 #include <pthread.h>
 //#include <zconf.h>
 #include <math.h>
+#include <zconf.h>
 
 
 // -------- Macros ----------
 // a cache line is 64 bytes, int -> 4 bytes, double -> 8 bytes
 // so 8 doubles are 64 bytes, 16 doubles are 2 caches lines (for prefetcher)
 #define CACHE_LINE_SIZE 16
-#define RHT_QUEUE_SIZE 512 // > 512 make no real diff
+#define RHT_QUEUE_SIZE 1024 // > 512 make no real diff
 #define MIN_PTR_DIST 200 // > 200 makes no real diff
-#define ALREADY_CONSUMED -251802.89123
+#define ALREADY_CONSUMED -251802.891237
 #define GROUP_GRANULARITY 8
 #define INLINE inline __attribute__((always_inline))
 #define EPSILON 0.000001
@@ -50,12 +51,14 @@ typedef struct {
 #define UNIT 16
 
 typedef struct {
-    volatile int deqPtr;
-    double padding0[31];
+    volatile int deqPtr, deqIter;
+    double deqGroupVal;
+    double padding0[30];
     int deqPtrLocal, enqPtrCached;
     double padding1[31];
-    volatile int enqPtr;
-    double padding2[31];
+    volatile int enqPtr, enqIter;
+    double enqGroupVal;
+    double padding2[30];
     int enqPtrLocal, deqPtrCached;
     double padding3[31];
     volatile double *content;
@@ -63,9 +66,10 @@ typedef struct {
     volatile double volatileValue;
     volatile int checkState;
     double padding5[30];
-    int pResidue, cResidue;
+    int pResidue, cResidue, nextEnq;
 }WANG_QUEUE;
 
+extern long producerCount;
 
 extern int wait_var;
 extern double wait_calc;
@@ -75,6 +79,8 @@ extern WANG_QUEUE wangQueue;
 
 extern double groupVarProducer;
 extern double groupVarConsumer;
+
+
 extern int groupIncompleteConsumer;
 extern int groupIncompleteProducer;
 extern __thread long iterCountProducer;
@@ -83,8 +89,50 @@ extern __thread long iterCountConsumer;
 static pthread_t **consumerThreads;
 static int consumerThreadCount;
 
-extern long producerCount;
 extern long consumerCount;
+
+extern int printValues;
+
+static void Queue_Init() {
+    int i = 0;
+    globalQueue.content = (double *) (malloc(sizeof(double) * RHT_QUEUE_SIZE));
+    for (; i < RHT_QUEUE_SIZE; i++) {
+        globalQueue.content[i] = ALREADY_CONSUMED;
+    }
+    globalQueue.volatileValue = ALREADY_CONSUMED;
+    globalQueue.checkState = 1;
+    globalQueue.enqPtr = globalQueue.deqPtr = consumerCount = producerCount = 0;
+}
+
+static void Wang_Queue_Init() {
+    wangQueue.content = (double *) (malloc(sizeof(double) * RHT_QUEUE_SIZE));
+    wangQueue.checkState = 1;
+    wangQueue.enqPtr = wangQueue.enqPtrLocal = wangQueue.enqPtrCached =
+    wangQueue.deqPtr = wangQueue.deqPtrLocal = wangQueue.deqPtrCached =
+    wangQueue.deqGroupVal = wangQueue.deqIter = wangQueue.enqGroupVal =
+    wangQueue.enqIter = consumerCount = producerCount = 0;
+    for (int i; i < RHT_QUEUE_SIZE; i++) {
+        wangQueue.content[i] = ALREADY_CONSUMED;
+    }
+}
+
+static void RHT_Replication_Init() {
+#if APPROACH_WANG == 1 || APPROACH_MIX_WANG == 1
+    Wang_Queue_Init();
+#else
+    Queue_Init();
+#endif
+}
+
+static void RHT_Replication_Finish() {
+#if APPROACH_WANG == 1
+    if(wangQueue.content)
+        free((void *) wangQueue.content);
+#else
+    if (globalQueue.content)
+        free((void *) globalQueue.content);
+#endif
+}
 
 // compiler option -ffast-math, has a problem with isnan method
 static int are_both_nan(double pValue, double cValue){
@@ -121,11 +169,10 @@ static int are_both_nan(double pValue, double cValue){
 #define write_move_inverted(value)                                      \
     globalQueue.nextEnq = (globalQueue.enqPtr + 1) % RHT_QUEUE_SIZE;    \
     globalQueue.content[globalQueue.nextEnq] = ALREADY_CONSUMED;        \
-    /*asm volatile("" ::: "memory");*/                                  \
     globalQueue.content[globalQueue.enqPtr] = value;                    \
     globalQueue.enqPtr = globalQueue.nextEnq;
 
-#if APPROACH_USING_POINTERS == 1 || APPROACH_ALREADY_CONSUMED == 1 || APPROACH_WANG == 1 || APPROACH_CONSUMER_NO_SYNC == 1
+#if APPROACH_USING_POINTERS == 1 || APPROACH_ALREADY_CONSUMED == 1 || APPROACH_WANG == 1 || APPROACH_CONSUMER_NO_SYNC == 1 || APPROACH_MIX_WANG == 1
 #define write_move(value) RHT_Produce(value);
 
 #elif APPROACH_WRITE_INVERTED_NEW_LIMIT == 1
@@ -269,12 +316,17 @@ static int are_both_nan(double pValue, double cValue){
 #if SKIP_VOLATILE == 1
 #define RHT_Produce_Volatile(volValue);
 #elif APPROACH_WANG == 1
-#define RHT_Produce_Volatile(volValue) /*producerCount++;*/                              \
+#define RHT_Produce_Volatile(volValue)                              \
     wangQueue.pResidue = UNIT - (wangQueue.enqPtrLocal % UNIT);     \
     while(wangQueue.pResidue-- > 0) Wang_Produce(0);                \
     wangQueue.volatileValue = volValue;                             \
     wangQueue.checkState = 0;                                       \
     while (wangQueue.checkState == 0); //asm("pause");
+#elif APPROACH_MIX_WANG == 1
+#define RHT_Produce_Volatile(volValue)                        \
+    wangQueue.volatileValue = volValue;                       \
+    wangQueue.checkState = 0;                                 \
+    while (wangQueue.checkState == 0) asm("pause");
 #else
 #define RHT_Produce_Volatile(volValue)                          \
     globalQueue.volatileValue = volValue;                       \
@@ -285,7 +337,7 @@ static int are_both_nan(double pValue, double cValue){
 #if SKIP_VOLATILE == 1
 #define RHT_Consume_Volatile(volValue);
 #elif APPROACH_WANG == 1
-#define RHT_Consume_Volatile(volValue) /*consumerCount++;*/         \
+#define RHT_Consume_Volatile(volValue)                              \
     while (wangQueue.checkState == 1);  /*asm("pause");*/           \
     if (!fequal(volValue, wangQueue.volatileValue)){                \
         Report_Soft_Error(volValue, wangQueue.volatileValue)        \
@@ -293,6 +345,13 @@ static int are_both_nan(double pValue, double cValue){
     wangQueue.checkState = 1;                                       \
     wangQueue.cResidue = UNIT - (wangQueue.deqPtrLocal % UNIT);     \
     while(wangQueue.cResidue-- > 0) Wang_Consume();
+#elif APPROACH_MIX_WANG == 1
+#define RHT_Consume_Volatile(volValue)                          \
+while (wangQueue.checkState == 1) asm("pause");                 \
+    if (!fequal(volValue, wangQueue.volatileValue)){            \
+        Report_Soft_Error(volValue, wangQueue.volatileValue)    \
+    }                                                           \
+    wangQueue.checkState = 1;
 #else
 #define RHT_Consume_Volatile(volValue)                          \
     while (globalQueue.checkState == 1) asm("pause");           \
@@ -313,43 +372,6 @@ static void SetThreadAffinity(int threadId) {
         fprintf(stderr, "Thread pinning failed!\n");
         exit(1);
     }
-}
-
-static void Queue_Init() {
-    int i = 0;
-    globalQueue.content = (double *) (malloc(sizeof(double) * RHT_QUEUE_SIZE));
-    for (; i < RHT_QUEUE_SIZE; i++) {
-        globalQueue.content[i] = ALREADY_CONSUMED;
-    }
-    globalQueue.volatileValue = ALREADY_CONSUMED;
-    globalQueue.checkState = 1;
-    globalQueue.enqPtr = globalQueue.deqPtr = consumerCount = producerCount = 0;
-}
-
-static void Wang_Queue_Init() {
-    wangQueue.content = (double *) (malloc(sizeof(double) * RHT_QUEUE_SIZE));
-    wangQueue.checkState = 1;
-    wangQueue.enqPtr = wangQueue.enqPtrLocal = wangQueue.enqPtrCached =
-    wangQueue.deqPtr = wangQueue.deqPtrLocal = wangQueue.deqPtrCached = 0;
-    consumerCount = producerCount = 0;
-}
-
-static void RHT_Replication_Init() {
-#if APPROACH_WANG == 1
-    Wang_Queue_Init();
-#else
-    Queue_Init();
-#endif
-}
-
-static void RHT_Replication_Finish() {
-#if APPROACH_WANG == 1
-    if(wangQueue.content)
-        free((void *) wangQueue.content);
-#else
-    if (globalQueue.content)
-        free((void *) globalQueue.content);
-#endif
 }
 
 //////////// INTERNAL QUEUE METHODS BODY //////////////////
@@ -495,23 +517,125 @@ static INLINE void Wang_Consume_Check(double currentValue) {
     wangQueue.deqPtrLocal = (wangQueue.deqPtrLocal + 1) % RHT_QUEUE_SIZE;
 }
 
-static INLINE void Wang_Consume_Improved(double currentValue) {
-    if(wangQueue.deqPtrLocal % UNIT == 0) {
-        wangQueue.deqPtr = wangQueue.deqPtrLocal;
+// -------- Mix approach of wang and ours
 
-        while(wangQueue.deqPtrLocal == wangQueue.enqPtrCached) {
-            wangQueue.enqPtrCached = wangQueue.enqPtr;
-            //asm("pause");
+#define produce_move_normal(value)                                  \
+    wangQueue.content[wangQueue.enqPtr] = value;                    \
+    wangQueue.enqPtr = (wangQueue.enqPtr + 1) % RHT_QUEUE_SIZE;
+
+#define produce_move_inverted(value)                                \
+    wangQueue.nextEnq = (wangQueue.enqPtr + 1) % RHT_QUEUE_SIZE;    \
+    wangQueue.content[wangQueue.nextEnq] = ALREADY_CONSUMED;        \
+    wangQueue.content[wangQueue.enqPtr] = value;                    \
+    wangQueue.enqPtr = wangQueue.nextEnq;
+
+#define consumer_move_normal(value)                                  \
+    wangQueue.content[wangQueue.deqPtr] = ALREADY_CONSUMED;          \
+    wangQueue.deqPtr = (wangQueue.deqPtr + 1) % RHT_QUEUE_SIZE;
+
+#define consumer_move_inverted(value)                                \
+    wangQueue.deqPtr = (wangQueue.deqPtr + 1) % RHT_QUEUE_SIZE;
+
+#if APPROACH_WRITE_INVERTED_NEW_LIMIT == 1
+#define produce_move(value) produce_move_inverted(value)
+#define consume_move() consumer_move_inverted()
+#else
+#define produce_move(value) produce_move_normal(value)
+#define consumer_move() consumer_move_normal()
+#endif
+
+static INLINE void Mix_Produce_Aux(double value) {
+//    if(!fequal(wangQueue.content[wangQueue.enqPtr], ALREADY_CONSUMED)){
+//        printf("Overwriting values at index %d, producerCount: %ld \n",
+//               wangQueue.enqPtr, producerCount);
+//        //exit(35);
+//    }
+
+    produce_move(value)
+
+    // while the next entry is the limit
+    if (wangQueue.enqPtr == wangQueue.deqPtrCached) {
+//        producerCount++;
+        wangQueue.nextEnq = (wangQueue.enqPtr + 1) % RHT_QUEUE_SIZE;
+
+        do{
+            if (fequal(wangQueue.content[wangQueue.nextEnq], ALREADY_CONSUMED) &&
+            wangQueue.deqPtr == wangQueue.enqPtr){
+                wangQueue.deqPtrCached = (wangQueue.deqPtrCached + (RHT_QUEUE_SIZE - 1)) % RHT_QUEUE_SIZE;
+            }else{
+                asm("pause");
+                wangQueue.deqPtrCached = wangQueue.deqPtr;
+            }
+        }while (wangQueue.enqPtr == wangQueue.deqPtrCached);
+    }
+}
+
+static INLINE void Mix_Produce(double value) {
+#if VAR_GROUPING == 1
+    wangQueue.enqGroupVal += value;
+    if (wangQueue.enqIter++ % GROUP_GRANULARITY == 0){
+        Mix_Produce_Aux(wangQueue.enqGroupVal);
+        wangQueue.enqGroupVal = 0;
+    }
+#else
+    Mix_Produce_Aux(value);
+#endif
+}
+
+// directly pushes a new value in the queue (regardless of var grouping)
+static INLINE void Mix_Produce_NoCheck(double value) {
+    Mix_Produce_Aux(value);
+}
+
+static INLINE double Mix_Consume() {
+    if(fequal(wangQueue.content[wangQueue.deqPtr], ALREADY_CONSUMED)){
+//        consumerCount++;
+        while (fequal(wangQueue.content[wangQueue.deqPtr], ALREADY_CONSUMED)){
+            asm("pause");
         }
     }
 
-    if (!fequal(wangQueue.content[wangQueue.deqPtrLocal], currentValue)) {
-        Report_Soft_Error(currentValue, wangQueue.content[wangQueue.deqPtrLocal])
-    }
-
-    wangQueue.deqPtrLocal = (wangQueue.deqPtrLocal + 1) % RHT_QUEUE_SIZE;
+    double value = wangQueue.content[wangQueue.deqPtr];
+    consumer_move()
+    return value;
 }
 
+// We cannot assume we can consume without checks, because the value is already produced, if we dont make sure
+// that we clear every value that has already been read. Otherwise we might re-read something previously read and
+// that is by chance the same as the current value... that decreases the soft error detection probability. So
+// the consumer no check improvement must be done along the already consumed approach.
+
+static INLINE void Mix_Consume_Check_Aux(double trailingValue) {
+    if (__builtin_expect(fequal(wangQueue.content[wangQueue.deqPtr], trailingValue), 1)) {
+        consumer_move()
+    } else {
+//        consumerCount++;
+        while (fequal(wangQueue.content[wangQueue.deqPtr], ALREADY_CONSUMED)){
+            asm("pause");
+        }
+
+        if (__builtin_expect(fequal(wangQueue.content[wangQueue.deqPtr], trailingValue), 1)) {
+            consumer_move()
+        } else {
+            printf("Wrong deqPtr: %d vs enqPtr: %d ... LValue: %f vs TValue: %f equal? %d \n",
+                   wangQueue.deqPtr, wangQueue.enqPtr, trailingValue, wangQueue.content[wangQueue.deqPtr],
+                   fequal(wangQueue.content[wangQueue.deqPtr], trailingValue));
+            Report_Soft_Error(trailingValue, wangQueue.content[wangQueue.deqPtr])
+        }
+    }
+}
+
+static INLINE void Mix_Consume_Check(double trailingValue) {
+#if VAR_GROUPING == 1
+    wangQueue.deqGroupVal += trailingValue;
+    if (wangQueue.deqIter++ % GROUP_GRANULARITY == 0){
+        Mix_Consume_Check_Aux(wangQueue.deqGroupVal);
+        wangQueue.deqGroupVal = 0;
+    }
+#else
+    Mix_Consume_Check_Aux(trailingValue);
+#endif
+}
 
 // -------- NoSyncConsumer Approach, reducing sync operations in the consumer  ----------
 
@@ -597,6 +721,7 @@ static INLINE void WriteInverted_Produce_Secure(double value){
 
 //////////// 'PUBLIC' QUEUE METHODS //////////////////
 void RHT_Produce(double value);
+void RHT_Produce_NoCheck(double value);
 void RHT_Consume_Check(double currentValue);
 double RHT_Consume();
 
