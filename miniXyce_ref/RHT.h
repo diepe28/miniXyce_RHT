@@ -125,7 +125,7 @@ static void RHT_Replication_Init() {
 }
 
 static void RHT_Replication_Finish() {
-#if APPROACH_WANG == 1
+#if APPROACH_WANG == 1 || APPROACH_MIX_WANG == 1
     if(wangQueue.content)
         free((void *) wangQueue.content);
 #else
@@ -315,6 +315,7 @@ static int are_both_nan(double pValue, double cValue){
 
 #if SKIP_VOLATILE == 1
 #define RHT_Produce_Volatile(volValue);
+#define RHT_Consume_Volatile(volValue);
 #elif APPROACH_WANG == 1
 #define RHT_Produce_Volatile(volValue)                              \
     wangQueue.pResidue = UNIT - (wangQueue.enqPtrLocal % UNIT);     \
@@ -322,21 +323,7 @@ static int are_both_nan(double pValue, double cValue){
     wangQueue.volatileValue = volValue;                             \
     wangQueue.checkState = 0;                                       \
     while (wangQueue.checkState == 0); //asm("pause");
-#elif APPROACH_MIX_WANG == 1
-#define RHT_Produce_Volatile(volValue)                        \
-    wangQueue.volatileValue = volValue;                       \
-    wangQueue.checkState = 0;                                 \
-    while (wangQueue.checkState == 0) asm("pause");
-#else
-#define RHT_Produce_Volatile(volValue)                          \
-    globalQueue.volatileValue = volValue;                       \
-    globalQueue.checkState = 0;                                 \
-    while (globalQueue.checkState == 0) asm("pause");
-#endif
 
-#if SKIP_VOLATILE == 1
-#define RHT_Consume_Volatile(volValue);
-#elif APPROACH_WANG == 1
 #define RHT_Consume_Volatile(volValue)                              \
     while (wangQueue.checkState == 1);  /*asm("pause");*/           \
     if (!fequal(volValue, wangQueue.volatileValue)){                \
@@ -345,14 +332,26 @@ static int are_both_nan(double pValue, double cValue){
     wangQueue.checkState = 1;                                       \
     wangQueue.cResidue = UNIT - (wangQueue.deqPtrLocal % UNIT);     \
     while(wangQueue.cResidue-- > 0) Wang_Consume();
+
 #elif APPROACH_MIX_WANG == 1
+#define RHT_Produce_Volatile(volValue)                        \
+    wangQueue.volatileValue = volValue;                       \
+    wangQueue.checkState = 0;                                 \
+    while (wangQueue.checkState == 0) asm("pause");
+
 #define RHT_Consume_Volatile(volValue)                          \
 while (wangQueue.checkState == 1) asm("pause");                 \
     if (!fequal(volValue, wangQueue.volatileValue)){            \
         Report_Soft_Error(volValue, wangQueue.volatileValue)    \
     }                                                           \
     wangQueue.checkState = 1;
+
 #else
+#define RHT_Produce_Volatile(volValue)                          \
+    globalQueue.volatileValue = volValue;                       \
+    globalQueue.checkState = 0;                                 \
+    while (globalQueue.checkState == 0) asm("pause");
+
 #define RHT_Consume_Volatile(volValue)                          \
     while (globalQueue.checkState == 1) asm("pause");           \
     if (!fequal(volValue, globalQueue.volatileValue)){          \
@@ -519,46 +518,28 @@ static INLINE void Wang_Consume_Check(double currentValue) {
 
 // -------- Mix approach of wang and ours
 
-#define produce_move_normal(value)                                  \
+#define produce_move(value)                                  \
     wangQueue.content[wangQueue.enqPtr] = value;                    \
     wangQueue.enqPtr = (wangQueue.enqPtr + 1) % RHT_QUEUE_SIZE;
 
-#define produce_move_inverted(value)                                \
-    wangQueue.nextEnq = (wangQueue.enqPtr + 1) % RHT_QUEUE_SIZE;    \
-    wangQueue.content[wangQueue.nextEnq] = ALREADY_CONSUMED;        \
-    wangQueue.content[wangQueue.enqPtr] = value;                    \
-    wangQueue.enqPtr = wangQueue.nextEnq;
-
-#define consumer_move_normal(value)                                  \
+#define consumer_move(value)                                  \
     wangQueue.content[wangQueue.deqPtr] = ALREADY_CONSUMED;          \
     wangQueue.deqPtr = (wangQueue.deqPtr + 1) % RHT_QUEUE_SIZE;
 
-#define consumer_move_inverted(value)                                \
-    wangQueue.deqPtr = (wangQueue.deqPtr + 1) % RHT_QUEUE_SIZE;
-
-#if APPROACH_WRITE_INVERTED_NEW_LIMIT == 1
-#define produce_move(value) produce_move_inverted(value)
-#define consume_move() consumer_move_inverted()
-#else
-#define produce_move(value) produce_move_normal(value)
-#define consumer_move() consumer_move_normal()
-#endif
-
-static INLINE void Mix_Produce_Aux(double value) {
+static INLINE void Mix_Produce(double value) {
 //    if(!fequal(wangQueue.content[wangQueue.enqPtr], ALREADY_CONSUMED)){
 //        printf("Overwriting values at index %d, producerCount: %ld \n",
 //               wangQueue.enqPtr, producerCount);
-//        //exit(35);
+//        exit(35);
 //    }
 
     produce_move(value)
 
     // while the next entry is the limit
     if (wangQueue.enqPtr == wangQueue.deqPtrCached) {
-//        producerCount++;
         wangQueue.nextEnq = (wangQueue.enqPtr + 1) % RHT_QUEUE_SIZE;
-
-        do{
+        do {
+            // if all are at the limit and the next one is already consumed --> we produce make a whole new round
             if (fequal(wangQueue.content[wangQueue.nextEnq], ALREADY_CONSUMED) &&
             wangQueue.deqPtr == wangQueue.enqPtr){
                 wangQueue.deqPtrCached = (wangQueue.deqPtrCached + (RHT_QUEUE_SIZE - 1)) % RHT_QUEUE_SIZE;
@@ -566,25 +547,8 @@ static INLINE void Mix_Produce_Aux(double value) {
                 asm("pause");
                 wangQueue.deqPtrCached = wangQueue.deqPtr;
             }
-        }while (wangQueue.enqPtr == wangQueue.deqPtrCached);
+        } while (wangQueue.enqPtr == wangQueue.deqPtrCached);
     }
-}
-
-static INLINE void Mix_Produce(double value) {
-#if VAR_GROUPING == 1
-    wangQueue.enqGroupVal += value;
-    if (wangQueue.enqIter++ % GROUP_GRANULARITY == 0){
-        Mix_Produce_Aux(wangQueue.enqGroupVal);
-        wangQueue.enqGroupVal = 0;
-    }
-#else
-    Mix_Produce_Aux(value);
-#endif
-}
-
-// directly pushes a new value in the queue (regardless of var grouping)
-static INLINE void Mix_Produce_NoCheck(double value) {
-    Mix_Produce_Aux(value);
 }
 
 static INLINE double Mix_Consume() {
@@ -605,11 +569,12 @@ static INLINE double Mix_Consume() {
 // that is by chance the same as the current value... that decreases the soft error detection probability. So
 // the consumer no check improvement must be done along the already consumed approach.
 
-static INLINE void Mix_Consume_Check_Aux(double trailingValue) {
+static INLINE void Mix_Consume_Check(double trailingValue) {
     if (__builtin_expect(fequal(wangQueue.content[wangQueue.deqPtr], trailingValue), 1)) {
         consumer_move()
     } else {
 //        consumerCount++;
+        wangQueue.deqPtrCached = (wangQueue.deqPtrCached + (RHT_QUEUE_SIZE - 1)) % RHT_QUEUE_SIZE;
         while (fequal(wangQueue.content[wangQueue.deqPtr], ALREADY_CONSUMED)){
             asm("pause");
         }
@@ -625,16 +590,30 @@ static INLINE void Mix_Consume_Check_Aux(double trailingValue) {
     }
 }
 
-static INLINE void Mix_Consume_Check(double trailingValue) {
-#if VAR_GROUPING == 1
+static INLINE void VG_Consume_Check(double trailingValue) {
     wangQueue.deqGroupVal += trailingValue;
     if (wangQueue.deqIter++ % GROUP_GRANULARITY == 0){
-        Mix_Consume_Check_Aux(wangQueue.deqGroupVal);
+#if APPROACH_MIX_WANG == 1
+        Mix_Consume_Check(wangQueue.deqGroupVal);
+#elif APPROACH_WANG == 1
+        Wang_Consume_Check(wangQueue.deqGroupVal);
+#endif
         wangQueue.deqGroupVal = 0;
     }
-#else
-    Mix_Consume_Check_Aux(trailingValue);
+}
+
+static INLINE void VG_Produce(double value) {
+    wangQueue.enqGroupVal += value;
+    if (wangQueue.enqIter++ % GROUP_GRANULARITY == 0) {
+
+#if APPROACH_MIX_WANG == 1
+        Mix_Produce(wangQueue.enqGroupVal);
+#elif APPROACH_WANG == 1
+        Wang_Produce(wangQueue.enqGroupVal);
 #endif
+        wangQueue.enqGroupVal = 0;
+    }
+
 }
 
 // -------- NoSyncConsumer Approach, reducing sync operations in the consumer  ----------

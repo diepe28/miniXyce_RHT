@@ -28,16 +28,16 @@ add_definitions(-DMINIXYCE_INFO=1-DPRINT_OUTPUT=0 -DPERCENTAGE_OF_REPLICATION=0)
 add_definitions(-DBRANCH_HINT=1 -DCOUNT_QUEUE_DESYNC=0 -DAPPROACH_NEW_ENQ_INDEX=0)
 
 # These are other approaches of the literature
-add_definitions(-DAPPROACH_USING_POINTERS=0)
-add_definitions(-DAPPROACH_ALREADY_CONSUMED=0)
-add_definitions(-DAPPROACH_WANG=0)
-
-# These are our approaches
-add_definitions(-DAPPROACH_MIX_WANG=1)
-add_definitions(-DAPPROACH_CONSUMER_NO_SYNC=0)
-add_definitions(-DAPPROACH_NEW_LIMIT=0)
-add_definitions(-DAPPROACH_WRITE_INVERTED_NEW_LIMIT=0)
-add_definitions(-DVAR_GROUPING=1) # it can be used with any of the below approaches
+#add_definitions(-DAPPROACH_USING_POINTERS=0)
+#add_definitions(-DAPPROACH_ALREADY_CONSUMED=0)
+#add_definitions(-DAPPROACH_WANG=0)
+#
+## These are our approaches
+#add_definitions(-DAPPROACH_MIX_WANG=1)
+#add_definitions(-DAPPROACH_CONSUMER_NO_SYNC=0)
+#add_definitions(-DAPPROACH_NEW_LIMIT=0)
+#add_definitions(-DAPPROACH_WRITE_INVERTED_NEW_LIMIT=0)
+#add_definitions(-DVAR_GROUPING=0) # it can be used with any of the below approaches
 
 #Init flags current
 set(FLAGS_CURRENT "anything")
@@ -78,12 +78,11 @@ endfunction(createExecutable)
 
 
 #current, for testing
-createExecutable("miniXyce-Current" ${FLAGS_CURRENT} 0)
+#createExecutable("miniXyce-Current" ${FLAGS_CURRENT} 0)
 
 # using pointer flags
 
 set(FLAGS_USING_POINTERS "APPROACH_USING_POINTERS=1")
-set(FLAGS_USING_POINTERS_VG "${FLAGS_USING_POINTERS};VAR_GROUPING=1")
 
 # using already consumed value flags
 set(FLAGS_ALREADY_CONSUMED "APPROACH_ALREADY_CONSUMED=1")
@@ -113,24 +112,24 @@ set(FLAGS_MIX_WANG "APPROACH_MIX_WANG=1")
 #createExecutable("miniXyce-AC-VG" ${FLAGS_ALREADY_CONSUMED} 1)
 
 # WANG
-#createExecutable("miniXyce-Wang" ${FLAGS_WANG} 0)
-#createExecutable("miniXyce-SRMT-VG" ${FLAGS_SRMT} 1)
+createExecutable("miniXyce-Wang" ${FLAGS_WANG} 0)
+createExecutable("miniXyce-Wang-VG" ${FLAGS_WANG} 1)
 
 # no sync consumer
 #createExecutable("miniXyce-NSC" ${FLAGS_NO_SYNC_CONSUMER} 0)
 #createExecutable("miniXyce-NSC-VG" ${FLAGS_NO_SYNC_CONSUMER} 1)
 
 # new limit
-#createExecutable("miniXyce-NL" ${FLAGS_NEW_LIMIT} 0)
-#createExecutable("miniXyce-NL-VG" ${FLAGS_NEW_LIMIT} 1)
+createExecutable("miniXyce-NL" ${FLAGS_NEW_LIMIT} 0)
+createExecutable("miniXyce-NL-VG" ${FLAGS_NEW_LIMIT} 1)
 
 # new limit inverted
 #createExecutable("miniXyce-NLI" ${FLAGS_NEW_LIMIT_INVERTED} 0)
 #createExecutable("miniXyce-NLI-VG" ${FLAGS_NEW_LIMIT_INVERTED} 1)
 
 # # mix wang approach
-#createExecutable("miniXyce-MIX" ${FLAGS_MIX_WANG} 0)
-# #createExecutable("miniXyce-MIX-VG" ${FLAGS_MIX_WANG} 1)
+createExecutable("miniXyce-MIX" ${FLAGS_MIX_WANG} 0)
+createExecutable("miniXyce-MIX-VG" ${FLAGS_MIX_WANG} 1)
 
 # Best approach
 #createExecutable("miniXyce-RHT" ${FLAGS_NEW_LIMIT} 1)

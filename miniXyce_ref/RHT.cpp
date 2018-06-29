@@ -6,7 +6,7 @@
 
 RHT_QUEUE globalQueue;
 
-#ifdef APPROACH_WANG
+#if APPROACH_WANG == 1 || APPROACH_MIX_WANG == 1
 WANG_QUEUE wangQueue;
 #endif
 
@@ -34,6 +34,8 @@ void RHT_Produce(double value) {
     AlreadyConsumed_Produce(value);
 #elif APPROACH_WRITE_INVERTED_NEW_LIMIT == 1
     WriteInverted_Produce_Secure(value);
+#elif VAR_GROUPING == 1 && (APPROACH_WANG == 1 || APPROACH_MIX_WANG == 1) // var grouping for wang and mix
+    VG_Produce(value);
 #elif APPROACH_WANG == 1
     Wang_Produce(value);
 #elif APPROACH_MIX_WANG == 1
@@ -44,9 +46,12 @@ void RHT_Produce(double value) {
 #endif
 }
 
+// directly pushes a new value in the queue (regardless of var grouping)
 void RHT_Produce_NoCheck(double value) {
 #if APPROACH_MIX_WANG == 1
-    Mix_Produce_NoCheck(value);
+    Mix_Produce(value);
+#elif APPROACH_WANG == 1
+    Wang_Produce(value);
 #else
     RHT_Produce(value);
 #endif
@@ -59,6 +64,8 @@ void RHT_Consume_Check(double currentValue) {
     AlreadyConsumed_Consume_Check(currentValue);
 #elif APPROACH_CONSUMER_NO_SYNC == 1 || APPROACH_NEW_LIMIT == 1 || APPROACH_WRITE_INVERTED_NEW_LIMIT == 1
     NoSyncConsumer_Consume_Check(currentValue); // they all use the no sync consumer
+#elif VAR_GROUPING == 1 && (APPROACH_WANG == 1 || APPROACH_MIX_WANG == 1) // var grouping for wang and mix
+    VG_Consume_Check(currentValue);
 #elif APPROACH_WANG == 1
     Wang_Consume_Check(currentValue);
 #elif APPROACH_MIX_WANG == 1
