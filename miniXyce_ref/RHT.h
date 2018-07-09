@@ -24,9 +24,9 @@
 // so 8 doubles are 64 bytes, 16 doubles are 2 caches lines (for prefetcher)
 #define CACHE_LINE_SIZE 16
 #define RHT_QUEUE_SIZE 1024 // > 512 make no real diff
-#define MIN_PTR_DIST 200 // > 200 makes no real diff
+#define MIN_PTR_DIST 128 // > 200 makes no real diff
 #define ALREADY_CONSUMED -251802.891237
-#define GROUP_GRANULARITY 8
+#define GROUP_GRANULARITY 16
 #define INLINE inline __attribute__((always_inline))
 #define EPSILON 0.000001
 #define fequal(a,b) (fabs(a-b) < EPSILON)
@@ -53,9 +53,11 @@ typedef struct {
 typedef struct {
     volatile int deqPtr, deqIter;
     double deqGroupVal;
-    double padding0[30];
+    unsigned long consumerCount;
+    double padding0[29];
     int deqPtrLocal, enqPtrCached;
-    double padding1[31];
+    unsigned long producerCount;
+    double padding1[30];
     volatile int enqPtr, enqIter;
     double enqGroupVal;
     double padding2[30];
@@ -69,7 +71,8 @@ typedef struct {
     int pResidue, cResidue, nextEnq;
 }WANG_QUEUE;
 
-extern long producerCount;
+//extern unsigned long wangQueue.producerCount;
+//extern unsigned long wangQueue.consumerCount;
 
 extern int wait_var;
 extern double wait_calc;
@@ -80,16 +83,13 @@ extern WANG_QUEUE wangQueue;
 extern double groupVarProducer;
 extern double groupVarConsumer;
 
-
 extern int groupIncompleteConsumer;
 extern int groupIncompleteProducer;
 extern __thread long iterCountProducer;
 extern __thread long iterCountConsumer;
 
 static pthread_t **consumerThreads;
-static int consumerThreadCount;
-
-extern long consumerCount;
+static int long consumerThreadCount;
 
 extern int printValues;
 
@@ -101,7 +101,7 @@ static void Queue_Init() {
     }
     globalQueue.volatileValue = ALREADY_CONSUMED;
     globalQueue.checkState = 1;
-    globalQueue.enqPtr = globalQueue.deqPtr = consumerCount = producerCount = 0;
+    globalQueue.enqPtr = globalQueue.deqPtr = wangQueue.consumerCount = wangQueue.producerCount = 0;
 }
 
 static void Wang_Queue_Init() {
@@ -110,7 +110,7 @@ static void Wang_Queue_Init() {
     wangQueue.enqPtr = wangQueue.enqPtrLocal = wangQueue.enqPtrCached =
     wangQueue.deqPtr = wangQueue.deqPtrLocal = wangQueue.deqPtrCached =
     wangQueue.deqGroupVal = wangQueue.deqIter = wangQueue.enqGroupVal =
-    wangQueue.enqIter = consumerCount = producerCount = 0;
+    wangQueue.enqIter = wangQueue.consumerCount = wangQueue.producerCount = 0;
     for (int i; i < RHT_QUEUE_SIZE; i++) {
         wangQueue.content[i] = ALREADY_CONSUMED;
     }
@@ -208,7 +208,7 @@ static int are_both_nan(double pValue, double cValue){
 #define wait_enough_distance(waitValue)         \
     calc_new_distance(waitValue)                \
     if(waitValue < MIN_PTR_DIST){               \
-        /*producerCount++;*/                                                            \
+        /*wangQueue.producerCount++;*/                                                            \
         do{                                     \
             wait_for_thread()                   \
             calc_new_distance(waitValue)        \
@@ -220,7 +220,7 @@ static int are_both_nan(double pValue, double cValue){
     waitValue = MIN_PTR_DIST;                                                           \
     globalQueue.nextEnq = (globalQueue.enqPtr + MIN_PTR_DIST) % RHT_QUEUE_SIZE;         \
     if(!fequal(ALREADY_CONSUMED, globalQueue.content[globalQueue.nextEnq])){            \
-        /*producerCount++;*/                                                            \
+        /*wangQueue.producerCount++;*/                                                            \
         do{                                                                             \
             wait_for_thread()                                                           \
         }while(!fequal(ALREADY_CONSUMED, globalQueue.content[globalQueue.nextEnq]));    \
@@ -309,8 +309,8 @@ static int are_both_nan(double pValue, double cValue){
 
 // must be inside {}
 #define Report_Soft_Error(consumerValue, producerValue) \
-    printf("\n SOFT ERROR DETECTED, Consumer: %f Producer: %f -- PCount: %ld , CCount: %ld\n",  \
-            consumerValue, producerValue, producerCount, consumerCount); \
+    printf("\n SOFT ERROR DETECTED, Consumer: %f Producer: %f -- PCount: %lu vs CCount: %lu, distance: %lu \n",  \
+            consumerValue, producerValue, wangQueue.producerCount, wangQueue.consumerCount, wangQueue.producerCount - wangQueue.consumerCount); \
     exit(1);
 
 #if SKIP_VOLATILE == 1
@@ -344,6 +344,7 @@ while (wangQueue.checkState == 1) asm("pause");                 \
     if (!fequal(volValue, wangQueue.volatileValue)){            \
         Report_Soft_Error(volValue, wangQueue.volatileValue)    \
     }                                                           \
+    wangQueue.producerCount = wangQueue.consumerCount = 0;      \
     wangQueue.checkState = 1;
 
 #else
@@ -472,7 +473,7 @@ static INLINE void Wang_Produce(double value) {
 
     if(wangQueue.enqPtrLocal % UNIT == 0) {
         // While were at the limit, we update the cached deqPtr
-//        if(wangQueue.enqPtrLocal == wangQueue.deqPtrCached) producerCount++;
+//        if(wangQueue.enqPtrLocal == wangQueue.deqPtrCached) wangQueue.producerCount++;
         while(wangQueue.enqPtrLocal == wangQueue.deqPtrCached) {
             wangQueue.deqPtrCached = wangQueue.deqPtr;
 //            asm("pause");
@@ -485,7 +486,7 @@ static INLINE double Wang_Consume() {
     if(wangQueue.deqPtrLocal % UNIT == 0) {
         wangQueue.deqPtr = wangQueue.deqPtrLocal;
         // While were at the limit, we update the cached enqPtr
-        // if(wangQueue.deqPtrLocal == wangQueue.enqPtrCached) consumerCount++;
+        // if(wangQueue.deqPtrLocal == wangQueue.enqPtrCached) wangQueue.wangQueue.consumerCount++;
         while(wangQueue.deqPtrLocal == wangQueue.enqPtrCached) {
             wangQueue.enqPtrCached = wangQueue.enqPtr;
             //asm("pause");
@@ -502,7 +503,7 @@ static INLINE void Wang_Consume_Check(double currentValue) {
         wangQueue.deqPtr = wangQueue.deqPtrLocal;
 
         // While were at the limit, we update the cached enqPtr
-//        if(wangQueue.deqPtrLocal == wangQueue.enqPtrCached) consumerCount++;
+//        if(wangQueue.deqPtrLocal == wangQueue.enqPtrCached) wangQueue.wangQueue.consumerCount++;
         while(wangQueue.deqPtrLocal == wangQueue.enqPtrCached) {
             wangQueue.enqPtrCached = wangQueue.enqPtr;
             //asm("pause");
@@ -528,8 +529,8 @@ static INLINE void Wang_Consume_Check(double currentValue) {
 
 static INLINE void Mix_Produce(double value) {
 //    if(!fequal(wangQueue.content[wangQueue.enqPtr], ALREADY_CONSUMED)){
-//        printf("Overwriting values at index %d, producerCount: %ld \n",
-//               wangQueue.enqPtr, producerCount);
+//        printf("Overwriting values at index %d, wangQueue.producerCount: %ld \n",
+//               wangQueue.enqPtr, wangQueue.producerCount);
 //        exit(35);
 //    }
 
@@ -553,7 +554,6 @@ static INLINE void Mix_Produce(double value) {
 
 static INLINE double Mix_Consume() {
     if(fequal(wangQueue.content[wangQueue.deqPtr], ALREADY_CONSUMED)){
-//        consumerCount++;
         while (fequal(wangQueue.content[wangQueue.deqPtr], ALREADY_CONSUMED)){
             asm("pause");
         }
@@ -573,7 +573,7 @@ static INLINE void Mix_Consume_Check(double trailingValue) {
     if (__builtin_expect(fequal(wangQueue.content[wangQueue.deqPtr], trailingValue), 1)) {
         consumer_move()
     } else {
-//        consumerCount++;
+//        wangQueue.wangQueue.consumerCount++;
         wangQueue.deqPtrCached = (wangQueue.deqPtrCached + (RHT_QUEUE_SIZE - 1)) % RHT_QUEUE_SIZE;
         while (fequal(wangQueue.content[wangQueue.deqPtr], ALREADY_CONSUMED)){
             asm("pause");
@@ -590,11 +590,14 @@ static INLINE void Mix_Consume_Check(double trailingValue) {
     }
 }
 
+static INLINE void Mix_Consume_Check_Improved(double trailingValue);
+
 static INLINE void VG_Consume_Check(double trailingValue) {
     wangQueue.deqGroupVal += trailingValue;
     if (wangQueue.deqIter++ % GROUP_GRANULARITY == 0){
 #if APPROACH_MIX_WANG == 1
         Mix_Consume_Check(wangQueue.deqGroupVal);
+//        Mix_Consume_Check_Improved(wangQueue.deqGroupVal);
 #elif APPROACH_WANG == 1
         Wang_Consume_Check(wangQueue.deqGroupVal);
 #endif
@@ -602,18 +605,94 @@ static INLINE void VG_Consume_Check(double trailingValue) {
     }
 }
 
+static INLINE void Mix_Produce_Improved(double value);
+
 static INLINE void VG_Produce(double value) {
     wangQueue.enqGroupVal += value;
     if (wangQueue.enqIter++ % GROUP_GRANULARITY == 0) {
-
 #if APPROACH_MIX_WANG == 1
         Mix_Produce(wangQueue.enqGroupVal);
+//        Mix_Produce_Improved(wangQueue.enqGroupVal);
 #elif APPROACH_WANG == 1
         Wang_Produce(wangQueue.enqGroupVal);
 #endif
         wangQueue.enqGroupVal = 0;
     }
+}
 
+// --------
+// -------- Mix improved, oh yeah ----------
+// --------
+static INLINE void Mix_Produce_Improved(double value) {
+//    long diff = wangQueue.producerCount - wangQueue.consumerCount;
+//    if (diff > RHT_QUEUE_SIZE){
+//    //if (wangQueue.producerCount - wangQueue.consumerCount > RHT_QUEUE_SIZE){
+//        printf("Overwriting at index %d --> %d, wangQueue.producerCount: %lu vs wangQueue.consumerCount %lu, diff: %lu enq: %d vs deq: %d\n",
+//               wangQueue.enqPtr, wangQueue.deqPtrCached, wangQueue.producerCount, wangQueue.consumerCount,
+//               diff, wangQueue.enqPtr, wangQueue.deqPtr);
+//        if(1)
+//            exit(35);
+//    }
+
+    wangQueue.content[wangQueue.enqPtr] = value;
+    wangQueue.enqPtr = (wangQueue.enqPtr + 1) % RHT_QUEUE_SIZE;
+
+    volatile long distance;
+    while (wangQueue.enqPtr == wangQueue.deqPtrCached) {
+        if (wangQueue.producerCount <= wangQueue.consumerCount) {
+            // a whole new round
+            break;
+        }
+        // we know producerCount > consumerCount
+
+        // cast to long is necessary
+        //while( (long) (wangQueue.producerCount - wangQueue.consumerCount) > MIN_PTR_DIST) asm("pause");
+
+        distance = wangQueue.producerCount - wangQueue.consumerCount;
+
+        if(distance > MIN_PTR_DIST){
+            while(distance > 0){
+                distance /= 2;
+                asm("pause");
+            }
+        }else {
+            wangQueue.deqPtrCached = (int) (wangQueue.deqPtrCached + (RHT_QUEUE_SIZE - distance - 1)) % RHT_QUEUE_SIZE;
+        }
+    }
+
+    wangQueue.producerCount++;
+}
+
+static INLINE double Mix_Consume_Improved() {
+    while (wangQueue.consumerCount >= wangQueue.producerCount){
+        asm("pause");
+    }
+
+    double value = wangQueue.content[wangQueue.deqPtr];
+    wangQueue.deqPtr = (wangQueue.deqPtr + 1) % RHT_QUEUE_SIZE, wangQueue.consumerCount++;
+//    asm volatile("" ::: "memory");
+    return value;
+}
+
+static INLINE void Mix_Consume_Check_Improved(double trailingValue) {
+    double currentValue = wangQueue.content[wangQueue.deqPtr];
+    if (__builtin_expect(fequal(currentValue, trailingValue), 1)) {
+        wangQueue.deqPtr = (wangQueue.deqPtr + 1) % RHT_QUEUE_SIZE, wangQueue.consumerCount++;
+    } else {
+        //wangQueue.deqPtrCached = (wangQueue.deqPtrCached + (RHT_QUEUE_SIZE - 1)) % RHT_QUEUE_SIZE;
+        while (wangQueue.consumerCount >= wangQueue.producerCount){
+            asm("pause");
+        }
+
+        if (__builtin_expect(fequal(wangQueue.content[wangQueue.deqPtr], trailingValue), 1)) {
+            wangQueue.deqPtr = (wangQueue.deqPtr + 1) % RHT_QUEUE_SIZE, wangQueue.consumerCount++;
+        } else {
+            printf("Wrong deqPtr: %d vs enqPtr: %d ... LValue: %f vs TValue: %f equal? %d \n",
+                   wangQueue.deqPtr, wangQueue.enqPtr, trailingValue, wangQueue.content[wangQueue.deqPtr],
+                   fequal(wangQueue.content[wangQueue.deqPtr], trailingValue));
+            Report_Soft_Error(trailingValue, wangQueue.content[wangQueue.deqPtr])
+        }
+    }
 }
 
 // -------- NoSyncConsumer Approach, reducing sync operations in the consumer  ----------
@@ -628,7 +707,7 @@ static INLINE double NoSyncConsumer_Consume() {
 #endif
     {
 #if COUNT_QUEUE_DESYNC == 1
-        consumerCount++;
+        wangQueue.consumerCount++;
 #endif
         do {
             asm("pause");
@@ -661,7 +740,7 @@ static INLINE void NoSyncConsumer_Consume_Check(double currentValue) {
 #endif
     {
 #if COUNT_QUEUE_DESYNC == 1
-        consumerCount++;
+        wangQueue.consumerCount++;
 #endif
         do asm("pause"); while (fequal(globalQueue.content[globalQueue.deqPtr], ALREADY_CONSUMED));
         globalQueue.otherValue = globalQueue.content[globalQueue.deqPtr];

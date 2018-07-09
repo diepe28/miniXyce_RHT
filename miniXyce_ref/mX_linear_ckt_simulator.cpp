@@ -194,7 +194,7 @@ int main(int argc, char* argv[]) {
 
             if (pid == 0) {
                 printf("Actual Walltime[%d] in seconds: %f, pCount: %ld vs cCount: %ld \n",
-                       iterator,  currentElapsed, producerCount, consumerCount);
+                       iterator,  currentElapsed, wangQueue.producerCount, wangQueue.consumerCount);
                 times += currentElapsed;
             }
 

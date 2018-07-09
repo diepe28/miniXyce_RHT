@@ -10,7 +10,8 @@ RHT_QUEUE globalQueue;
 WANG_QUEUE wangQueue;
 #endif
 
-long producerCount;
+//unsigned long producerCount;
+//unsigned long consumerCount;
 
 int wait_var;
 double wait_calc;
@@ -22,7 +23,7 @@ int groupIncompleteProducer;
 __thread long iterCountProducer;
 __thread long iterCountConsumer;
 
-long consumerCount;
+
 int printValues = 0;
 
 void RHT_Produce(double value) {
@@ -40,6 +41,7 @@ void RHT_Produce(double value) {
     Wang_Produce(value);
 #elif APPROACH_MIX_WANG == 1
     Mix_Produce(value);
+//    Mix_Produce_Improved(value);
 #else
     printf("NO APPROACH SPECIFIED\n");
     exit(1);
@@ -50,6 +52,7 @@ void RHT_Produce(double value) {
 void RHT_Produce_NoCheck(double value) {
 #if APPROACH_MIX_WANG == 1
     Mix_Produce(value);
+//    Mix_Produce_Improved(value);
 #elif APPROACH_WANG == 1
     Wang_Produce(value);
 #else
@@ -70,6 +73,7 @@ void RHT_Consume_Check(double currentValue) {
     Wang_Consume_Check(currentValue);
 #elif APPROACH_MIX_WANG == 1
     Mix_Consume_Check(currentValue);
+//    Mix_Consume_Check_Improved(currentValue);
 #else
     printf("NO APPROACH SPECIFIED\n");
     exit(1);
@@ -87,6 +91,7 @@ double RHT_Consume() {
     return Wang_Consume();
 #elif APPROACH_MIX_WANG == 1
     return Mix_Consume();
+//    return Mix_Consume_Improved();
 #else
     printf("NO APPROACH SPECIFIED\n");
     exit(1);

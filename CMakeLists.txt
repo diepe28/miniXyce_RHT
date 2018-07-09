@@ -120,16 +120,16 @@ createExecutable("miniXyce-Wang-VG" ${FLAGS_WANG} 1)
 #createExecutable("miniXyce-NSC-VG" ${FLAGS_NO_SYNC_CONSUMER} 1)
 
 # new limit
-createExecutable("miniXyce-NL" ${FLAGS_NEW_LIMIT} 0)
-createExecutable("miniXyce-NL-VG" ${FLAGS_NEW_LIMIT} 1)
+#createExecutable("miniXyce-NL" ${FLAGS_NEW_LIMIT} 0)
+#createExecutable("miniXyce-NL-VG" ${FLAGS_NEW_LIMIT} 1)
 
 # new limit inverted
 #createExecutable("miniXyce-NLI" ${FLAGS_NEW_LIMIT_INVERTED} 0)
 #createExecutable("miniXyce-NLI-VG" ${FLAGS_NEW_LIMIT_INVERTED} 1)
 
 # # mix wang approach
-createExecutable("miniXyce-MIX" ${FLAGS_MIX_WANG} 0)
-createExecutable("miniXyce-MIX-VG" ${FLAGS_MIX_WANG} 1)
+#createExecutable("miniXyce-MIX" ${FLAGS_MIX_WANG} 0)
+#createExecutable("miniXyce-MIX-VG" ${FLAGS_MIX_WANG} 1)
 
 # Best approach
 #createExecutable("miniXyce-RHT" ${FLAGS_NEW_LIMIT} 1)
