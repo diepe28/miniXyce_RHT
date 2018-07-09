@@ -22,7 +22,6 @@
 // -------- Macros ----------
 // a cache line is 64 bytes, int -> 4 bytes, double -> 8 bytes
 // so 8 doubles are 64 bytes, 16 doubles are 2 caches lines (for prefetcher)
-#define CACHE_LINE_SIZE 16
 #define RHT_QUEUE_SIZE 1024 // > 512 make no real diff
 #define MIN_PTR_DIST 128 // > 200 makes no real diff
 #define ALREADY_CONSUMED -251802.891237
@@ -71,27 +70,8 @@ typedef struct {
     int pResidue, cResidue, nextEnq;
 }WANG_QUEUE;
 
-//extern unsigned long wangQueue.producerCount;
-//extern unsigned long wangQueue.consumerCount;
-
-extern int wait_var;
-extern double wait_calc;
-
 extern RHT_QUEUE globalQueue;
 extern WANG_QUEUE wangQueue;
-
-extern double groupVarProducer;
-extern double groupVarConsumer;
-
-extern int groupIncompleteConsumer;
-extern int groupIncompleteProducer;
-extern __thread long iterCountProducer;
-extern __thread long iterCountConsumer;
-
-static pthread_t **consumerThreads;
-static int long consumerThreadCount;
-
-extern int printValues;
 
 static void Queue_Init() {
     int i = 0;
@@ -117,7 +97,7 @@ static void Wang_Queue_Init() {
 }
 
 static void RHT_Replication_Init() {
-#if APPROACH_WANG == 1 || APPROACH_MIX_WANG == 1
+#if APPROACH_WANG == 1 || APPROACH_MIX_WANG == 1 || APPROACH_MIX_IMPROVED == 1
     Wang_Queue_Init();
 #else
     Queue_Init();
@@ -125,7 +105,7 @@ static void RHT_Replication_Init() {
 }
 
 static void RHT_Replication_Finish() {
-#if APPROACH_WANG == 1 || APPROACH_MIX_WANG == 1
+#if APPROACH_WANG == 1 || APPROACH_MIX_WANG == 1 || APPROACH_MIX_IMPROVED == 1
     if(wangQueue.content)
         free((void *) wangQueue.content);
 #else
@@ -143,169 +123,6 @@ static int are_both_nan(double pValue, double cValue){
     /* } */
     return isnan(pValue) && isnan(cValue);
 }
-
-/// ((RHT_QUEUE_SIZE-globalQueue.enqPtr + globalQueue.localDeq) % RHT_QUEUE_SIZE)-1; this would be faster and
-/// with the -1 we make sure that the producer never really catches up to the consumer, but it might still happen
-/// the other way around,
-
-/// Another thing that we may try is inspired on wait-free programming from moodyCamel queue: the code is set up such
-/// that each thread can always advance regardless of what the other is doing, when the queue is full the producer
-/// allocates more memory
-
-#define calc_new_distance(waitValue)                                            \
-    waitValue = (RHT_QUEUE_SIZE-(globalQueue.enqPtr+1) + globalQueue.deqPtr) % RHT_QUEUE_SIZE;
-
-#define calc_new_distance1(waitValue)                                            \
-    globalQueue.localDeq = globalQueue.deqPtr;                                  \
-    waitValue = (globalQueue.enqPtr >= globalQueue.localDeq ?                   \
-                RHT_QUEUE_SIZE - globalQueue.enqPtr + globalQueue.localDeq:   \
-                globalQueue.localDeq - globalQueue.enqPtr)-1;
-
-
-#define write_move_normal(value)                                        \
-    globalQueue.content[globalQueue.enqPtr] = value;                    \
-    globalQueue.enqPtr = (globalQueue.enqPtr + 1) % RHT_QUEUE_SIZE;
-
-#define write_move_inverted(value)                                      \
-    globalQueue.nextEnq = (globalQueue.enqPtr + 1) % RHT_QUEUE_SIZE;    \
-    globalQueue.content[globalQueue.nextEnq] = ALREADY_CONSUMED;        \
-    globalQueue.content[globalQueue.enqPtr] = value;                    \
-    globalQueue.enqPtr = globalQueue.nextEnq;
-
-#if APPROACH_USING_POINTERS == 1 || APPROACH_ALREADY_CONSUMED == 1 || APPROACH_WANG == 1 || APPROACH_CONSUMER_NO_SYNC == 1 || APPROACH_MIX_WANG == 1
-#define write_move(value) RHT_Produce(value);
-
-#elif APPROACH_WRITE_INVERTED_NEW_LIMIT == 1
-#define write_move(value) write_move_inverted(value)
-
-#elif APPROACH_NEW_LIMIT == 1
-#define write_move(value) write_move_normal(value)
-
-#endif
-
-#if VAR_GROUPING == 1
-#define calc_write_move(iterator, operation, value)     \
-    operation;                                          \
-    groupVarProducer += value;                          \
-    if(iterator % GROUP_GRANULARITY == 0){              \
-        write_move(groupVarProducer)                    \
-        groupVarProducer = 0;                           \
-    }
-#else
-#define calc_write_move(iterator, operation, value)     \
-    operation;                                          \
-    write_move(value)
-#endif
-
-
-#define wait_for_thread() asm("pause"); //asm("pause");
-
-
-#define wait_for_thread1()\
-    for(wait_var = wait_calc = 0; wait_var < 1000; wait_calc += (wait_var++ % 10));
-
-// waits until the distance between pointers is > MIN_PTR_DIST
-#define wait_enough_distance(waitValue)         \
-    calc_new_distance(waitValue)                \
-    if(waitValue < MIN_PTR_DIST){               \
-        /*wangQueue.producerCount++;*/                                                            \
-        do{                                     \
-            wait_for_thread()                   \
-            calc_new_distance(waitValue)        \
-        }while(waitValue < MIN_PTR_DIST);       \
-    }
-
-// waits until the nextEnqIndex = enq+MIN_PTR_DIST, is ALREADY_CONSUMED, only when the consumer writes
-#define wait_next_enqIndex(waitValue)                                                   \
-    waitValue = MIN_PTR_DIST;                                                           \
-    globalQueue.nextEnq = (globalQueue.enqPtr + MIN_PTR_DIST) % RHT_QUEUE_SIZE;         \
-    if(!fequal(ALREADY_CONSUMED, globalQueue.content[globalQueue.nextEnq])){            \
-        /*wangQueue.producerCount++;*/                                                            \
-        do{                                                                             \
-            wait_for_thread()                                                           \
-        }while(!fequal(ALREADY_CONSUMED, globalQueue.content[globalQueue.nextEnq]));    \
-    }
-
-#if APPROACH_NEW_ENQ_INDEX == 1
-#define wait_for_consumer(waitValue) wait_next_enqIndex(waitValue)
-#else
-#define wait_for_consumer(waitValue) wait_enough_distance(waitValue)
-#endif
-
-// try with proportional wait
-#define replicate_loop_producer1(numIters, iterator, value, operation)   \
-    wait_for_consumer(globalQueue.newLimit)                             \
-    iterator = 0;                                                       \
-    while (globalQueue.newLimit < numIters) {                           \
-        for (; iterator < globalQueue.newLimit; iterator++){            \
-            if (iterator % 50 == 0) asm("pause");                      \
-            calc_and_move(operation, value)                             \
-        }                                                               \
-        wait_for_consumer(globalQueue.diff)                             \
-        globalQueue.newLimit += globalQueue.diff;                       \
-    }                                                                   \
-    for (; iterator < numIters; iterator++){                            \
-        calc_and_move(operation, value)                                 \
-    }
-
-// works for either forward or backward 'for' loops
-#if APPROACH_WRITE_INVERTED_NEW_LIMIT == 1 || APPROACH_NEW_LIMIT == 1
-#define replicate_loop_work(numIters, iterator, iterOp, value, operation)  \
-    wait_for_consumer(globalQueue.diff)                                         \
-    while (globalQueue.diff < numIters) {                                       \
-        numIters -= globalQueue.diff;                                           \
-        for (; globalQueue.diff-- > 0; iterOp){                                 \
-            calc_write_move(iterator, operation, value)                         \
-        }                                                                       \
-        wait_for_consumer(globalQueue.diff)                                     \
-    }                                                                           \
-    for (; numIters-- > 0; iterOp){                                             \
-        calc_write_move(iterator, operation, value)                             \
-    }
-#else // we simply re-construct the loop
-#define replicate_loop_work(numIters, iterator, iterOp, value, operation)   \
-    for(; numIters-- > 0; iterOp){                                          \
-        calc_write_move(iterator, operation, value)                         \
-    }
-#endif
-
-#if VAR_GROUPING == 1
-#define replicate_loop_producer(sIndex, fIndex, iterator, iterOp, value, operation) \
-    iterCountProducer = fIndex - sIndex;                                            \
-    groupVarProducer = 0;                                                           \
-    groupIncompleteProducer = iterCountProducer % GROUP_GRANULARITY;                \
-    replicate_loop_work(iterCountProducer, iterator, iterOp, value, operation)      \
-    if (groupIncompleteProducer) {                                                  \
-        write_move(groupVarProducer)                                                \
-    }
-#else
-#define replicate_loop_producer(sIndex, fIndex, iterator, iterOp, value, operation) \
-    iterCountProducer = fIndex - sIndex;                                            \
-    replicate_loop_work(iterCountProducer, iterator, iterOp, value, operation)
-#endif
-
-
-#if VAR_GROUPING == 1
-#define replicate_loop_consumer(sIndex, fIndex, iterator, iterOp, value, operation) \
-    iterCountConsumer = fIndex - sIndex;                                            \
-    groupIncompleteConsumer = iterCountConsumer % GROUP_GRANULARITY;                \
-    for(groupVarConsumer = 0; iterCountConsumer-- > 0; iterOp){                     \
-        operation;                                                                  \
-        groupVarConsumer += value;                                                  \
-        if(iterator % GROUP_GRANULARITY == 0){                                      \
-            RHT_Consume_Check(groupVarConsumer);                                    \
-            groupVarConsumer = 0;                                                   \
-        }                                                                           \
-    }                                                                               \
-    if (groupIncompleteConsumer) RHT_Consume_Check(groupVarConsumer);
-#else // we simply re construct the loop
-#define replicate_loop_consumer(sIndex, fIndex, iterator, iterOp, value, operation) \
-    iterCountConsumer = fIndex - sIndex;                                            \
-    for(; iterCountConsumer-- > 0; iterOp){                                         \
-        operation;                                                                  \
-        RHT_Consume_Check(value);                                                   \
-    }
-#endif
 
 // must be inside {}
 #define Report_Soft_Error(consumerValue, producerValue) \
@@ -333,7 +150,7 @@ static int are_both_nan(double pValue, double cValue){
     wangQueue.cResidue = UNIT - (wangQueue.deqPtrLocal % UNIT);     \
     while(wangQueue.cResidue-- > 0) Wang_Consume();
 
-#elif APPROACH_MIX_WANG == 1
+#elif APPROACH_MIX_WANG == 1 || APPROACH_MIX_IMPROVED == 1
 #define RHT_Produce_Volatile(volValue)                        \
     wangQueue.volatileValue = volValue;                       \
     wangQueue.checkState = 0;                                 \
@@ -376,16 +193,6 @@ static void SetThreadAffinity(int threadId) {
 
 //////////// INTERNAL QUEUE METHODS BODY //////////////////
 
-#if APPROACH_WRITE_INVERTED_NEW_LIMIT == 1
-#define consumer_move_next()                                        \
-    globalQueue.deqPtr = (globalQueue.deqPtr + 1) % RHT_QUEUE_SIZE;
-
-#else
-#define consumer_move_next()                                        \
-    globalQueue.content[globalQueue.deqPtr] = ALREADY_CONSUMED;     \
-    globalQueue.deqPtr = (globalQueue.deqPtr + 1) % RHT_QUEUE_SIZE;
-#endif
-
 // -------- Already Consumed Approach ----------
 
 static INLINE void AlreadyConsumed_Produce(double value) {
@@ -405,7 +212,8 @@ static INLINE double AlreadyConsumed_Consume() {
     }
 
     double value = globalQueue.content[globalQueue.deqPtr];
-    consumer_move_next()
+    globalQueue.content[globalQueue.deqPtr] = ALREADY_CONSUMED;
+    globalQueue.deqPtr = (globalQueue.deqPtr + 1) % RHT_QUEUE_SIZE;
     return value;
 }
 
@@ -418,9 +226,9 @@ static INLINE void AlreadyConsumed_Consume_Check(double currentValue) {
         Report_Soft_Error(globalQueue.content[globalQueue.deqPtr], currentValue)
     }
 
-    consumer_move_next()
+    globalQueue.content[globalQueue.deqPtr] = ALREADY_CONSUMED;
+    globalQueue.deqPtr = (globalQueue.deqPtr + 1) % RHT_QUEUE_SIZE;
 }
-
 
 // -------- Using Pointers Approach ----------
 
@@ -463,6 +271,14 @@ static INLINE void UsingPointers_Consume_Check(double currentValue) {
 
     globalQueue.deqPtr = (globalQueue.deqPtr + 1) % RHT_QUEUE_SIZE;
 }
+
+#define produce_move(value)                                  \
+    wangQueue.content[wangQueue.enqPtr] = value;                    \
+    wangQueue.enqPtr = (wangQueue.enqPtr + 1) % RHT_QUEUE_SIZE;
+
+#define consumer_move(value)                                  \
+    wangQueue.content[wangQueue.deqPtr] = ALREADY_CONSUMED;          \
+    wangQueue.deqPtr = (wangQueue.deqPtr + 1) % RHT_QUEUE_SIZE;
 
 
 // -------- Wang Approach from Compiler-Managed Software-based Redundant ... paper ----------
@@ -519,14 +335,6 @@ static INLINE void Wang_Consume_Check(double currentValue) {
 
 // -------- Mix approach of wang and ours
 
-#define produce_move(value)                                  \
-    wangQueue.content[wangQueue.enqPtr] = value;                    \
-    wangQueue.enqPtr = (wangQueue.enqPtr + 1) % RHT_QUEUE_SIZE;
-
-#define consumer_move(value)                                  \
-    wangQueue.content[wangQueue.deqPtr] = ALREADY_CONSUMED;          \
-    wangQueue.deqPtr = (wangQueue.deqPtr + 1) % RHT_QUEUE_SIZE;
-
 static INLINE void Mix_Produce(double value) {
 //    if(!fequal(wangQueue.content[wangQueue.enqPtr], ALREADY_CONSUMED)){
 //        printf("Overwriting values at index %d, wangQueue.producerCount: %ld \n",
@@ -564,11 +372,6 @@ static INLINE double Mix_Consume() {
     return value;
 }
 
-// We cannot assume we can consume without checks, because the value is already produced, if we dont make sure
-// that we clear every value that has already been read. Otherwise we might re-read something previously read and
-// that is by chance the same as the current value... that decreases the soft error detection probability. So
-// the consumer no check improvement must be done along the already consumed approach.
-
 static INLINE void Mix_Consume_Check(double trailingValue) {
     if (__builtin_expect(fequal(wangQueue.content[wangQueue.deqPtr], trailingValue), 1)) {
         consumer_move()
@@ -590,39 +393,8 @@ static INLINE void Mix_Consume_Check(double trailingValue) {
     }
 }
 
-static INLINE void Mix_Consume_Check_Improved(double trailingValue);
+// -------- Mix improved, yeah rigth! ----------
 
-static INLINE void VG_Consume_Check(double trailingValue) {
-    wangQueue.deqGroupVal += trailingValue;
-    if (wangQueue.deqIter++ % GROUP_GRANULARITY == 0){
-#if APPROACH_MIX_WANG == 1
-        Mix_Consume_Check(wangQueue.deqGroupVal);
-//        Mix_Consume_Check_Improved(wangQueue.deqGroupVal);
-#elif APPROACH_WANG == 1
-        Wang_Consume_Check(wangQueue.deqGroupVal);
-#endif
-        wangQueue.deqGroupVal = 0;
-    }
-}
-
-static INLINE void Mix_Produce_Improved(double value);
-
-static INLINE void VG_Produce(double value) {
-    wangQueue.enqGroupVal += value;
-    if (wangQueue.enqIter++ % GROUP_GRANULARITY == 0) {
-#if APPROACH_MIX_WANG == 1
-        Mix_Produce(wangQueue.enqGroupVal);
-//        Mix_Produce_Improved(wangQueue.enqGroupVal);
-#elif APPROACH_WANG == 1
-        Wang_Produce(wangQueue.enqGroupVal);
-#endif
-        wangQueue.enqGroupVal = 0;
-    }
-}
-
-// --------
-// -------- Mix improved, oh yeah ----------
-// --------
 static INLINE void Mix_Produce_Improved(double value) {
 //    long diff = wangQueue.producerCount - wangQueue.consumerCount;
 //    if (diff > RHT_QUEUE_SIZE){
@@ -637,20 +409,17 @@ static INLINE void Mix_Produce_Improved(double value) {
     wangQueue.content[wangQueue.enqPtr] = value;
     wangQueue.enqPtr = (wangQueue.enqPtr + 1) % RHT_QUEUE_SIZE;
 
-    volatile long distance;
+    volatile long distance; // must be long because a diff between unsigned longs can get messy
     while (wangQueue.enqPtr == wangQueue.deqPtrCached) {
         if (wangQueue.producerCount <= wangQueue.consumerCount) {
             // a whole new round
             break;
         }
         // we know producerCount > consumerCount
-
-        // cast to long is necessary
-        //while( (long) (wangQueue.producerCount - wangQueue.consumerCount) > MIN_PTR_DIST) asm("pause");
-
         distance = wangQueue.producerCount - wangQueue.consumerCount;
 
         if(distance > MIN_PTR_DIST){
+            // proportional wait
             while(distance > 0){
                 distance /= 2;
                 asm("pause");
@@ -695,86 +464,33 @@ static INLINE void Mix_Consume_Check_Improved(double trailingValue) {
     }
 }
 
-// -------- NoSyncConsumer Approach, reducing sync operations in the consumer  ----------
-
-static INLINE double NoSyncConsumer_Consume() {
-    double value = globalQueue.content[globalQueue.deqPtr];
-
-#if BRANCH_HINT == 1
-    if (__builtin_expect(fequal(value, ALREADY_CONSUMED), 0))
-#else
-    if (fequal(value, ALREADY_CONSUMED))
+// var grouping methods
+static INLINE void VG_Consume_Check(double trailingValue) {
+    wangQueue.deqGroupVal += trailingValue;
+    if (wangQueue.deqIter++ % GROUP_GRANULARITY == 0) {
+#if APPROACH_MIX_WANG == 1
+        Mix_Consume_Check(wangQueue.deqGroupVal);
+#elif APPROACH_MIX_IMPROVED == 1
+        Mix_Consume_Check_Improved(wangQueue.deqGroupVal);
+#elif APPROACH_WANG == 1
+        Wang_Consume_Check(wangQueue.deqGroupVal);
 #endif
-    {
-#if COUNT_QUEUE_DESYNC == 1
-        wangQueue.consumerCount++;
-#endif
-        do {
-            asm("pause");
-        } while (fequal(globalQueue.content[globalQueue.deqPtr], ALREADY_CONSUMED));
-        value = globalQueue.content[globalQueue.deqPtr];
+        wangQueue.deqGroupVal = 0;
     }
-
-    consumer_move_next()
-    return value;
 }
 
-static INLINE void NoSyncConsumer_Consume_Check(double currentValue) {
-    globalQueue.otherValue = globalQueue.content[globalQueue.deqPtr];
-
-#if BRANCH_HINT == 1
-    if (__builtin_expect(fequal(currentValue, globalQueue.otherValue), 1))
-#else
-        if(fequal(currentValue, globalQueue.otherValue))
+static INLINE void VG_Produce(double value) {
+    wangQueue.enqGroupVal += value;
+    if (wangQueue.enqIter++ % GROUP_GRANULARITY == 0) {
+#if APPROACH_MIX_WANG == 1
+        Mix_Produce(wangQueue.enqGroupVal);
+#elif APPROACH_MIX_IMPROVED == 1
+        Mix_Produce_Improved(wangQueue.enqGroupVal);
+#elif APPROACH_WANG == 1
+        Wang_Produce(wangQueue.enqGroupVal);
 #endif
-    {
-        consumer_move_next()
-        return;
+        wangQueue.enqGroupVal = 0;
     }
-
-    // probably des-sync of the queue
-#if BRANCH_HINT == 1
-    if (__builtin_expect(fequal(globalQueue.otherValue, ALREADY_CONSUMED), 1))
-#else
-    if(fequal(globalQueue.otherValue, ALREADY_CONSUMED))
-#endif
-    {
-#if COUNT_QUEUE_DESYNC == 1
-        wangQueue.consumerCount++;
-#endif
-        do asm("pause"); while (fequal(globalQueue.content[globalQueue.deqPtr], ALREADY_CONSUMED));
-        globalQueue.otherValue = globalQueue.content[globalQueue.deqPtr];
-
-#if BRANCH_HINT == 1
-        if (__builtin_expect(fequal(currentValue, globalQueue.otherValue), 1))
-#else
-            if (fequal(currentValue, globalQueue.otherValue))
-#endif
-        {
-            consumer_move_next()
-            return;
-        }
-    }
-
-    if (are_both_nan(currentValue, globalQueue.otherValue)){
-        consumer_move_next()
-        return;
-    }
-
-    Report_Soft_Error(currentValue, globalQueue.otherValue)
-}
-
-// -------- Write Inverted New Limit Approach ----------
-
-static INLINE void WriteInverted_Produce_Secure(double value){
-    calc_new_distance(globalQueue.newLimit)
-
-    while(globalQueue.newLimit < 8){
-        asm("pause");
-        calc_new_distance(globalQueue.newLimit)
-    }
-
-    write_move_inverted(value)
 }
 
 //////////// 'PUBLIC' QUEUE METHODS //////////////////

@@ -804,8 +804,11 @@ double main_execution_replicated(int p, int pid, int n, int argc, char* argv[]) 
         std::vector<double> RHS;
         /*-- RHT -- */ sparse_matrix_vector_product_producer(B, init_cond, RHS);
 
-        int i = 0;
-        replicate_loop_producer(0, num_my_rows, i, i++, RHS[i], RHS[i] = (RHS[i]/t_step) + b[i])
+        for (int i = 0; i < num_my_rows; i++) {
+            RHS[i] /= t_step;
+            RHS[i] += b[i];
+            /*-- RHT -- */ RHT_Produce(RHS[i]);
+        }
 
         // now solve the linear system just built using GMRES(k)
         /*-- RHT -- */ gmres_producer(A, RHS, init_cond, tol, res, k, init_cond, iters, restarts);
@@ -1084,8 +1087,11 @@ void consumer_thread_func(void *args) {
         std::vector<double> RHS;
         /*-- RHT -- */ sparse_matrix_vector_product_consumer(B, init_cond, RHS);
 
-        int i = 0;
-        replicate_loop_consumer(0, num_my_rows, i, i++, RHS[i], RHS[i] = (RHS[i]/t_step) + b[i])
+        for (int i = 0; i < num_my_rows; i++) {
+            RHS[i] /= t_step;
+            RHS[i] += b[i];
+            /*-- RHT -- */ RHT_Consume_Check(RHS[i]);
+        }
 
         // now solve the linear system just built using GMRES(k)
         /*-- RHT -- */ gmres_consumer(A, RHS, init_cond, tol, res, k, init_cond, iters, restarts);
@@ -1112,94 +1118,4 @@ void consumer_thread_func(void *args) {
 
     // Clean up
     mX_linear_DAE_utils::destroy(dae);
-}
-
-double test_execution_producer(int n, int producerCore) {
-
-    struct timespec startExe, endExe;
-    double elapsedExe, iterValue = 0, volatileValue, total = 0;
-    SetThreadAffinity(producerCore);
-
-    clock_gettime(CLOCK_MONOTONIC, &startExe);
-    {
-        for(int i = 0; i < n; i++) {
-            int j = 0;
-            replicate_loop_producer(0, n, j, j++, iterValue, iterValue = j * i)
-
-            if(i % 1000){
-                volatileValue = iterValue * i;
-                RHT_Produce_Volatile(volatileValue);
-                total += volatileValue;
-            }
-        }
-    }
-    clock_gettime(CLOCK_MONOTONIC, &endExe);
-
-    // To avoid compiler marking dead code
-    if(total < 0) {
-        fprintf(stderr, "Something about totall %f\n", total);
-    }
-
-    elapsedExe = (endExe.tv_sec - startExe.tv_sec);
-    elapsedExe += (endExe.tv_nsec - startExe.tv_nsec) / 1000000000.0;
-
-    return elapsedExe;
-}
-
-void test_execution_consumer(void * args) {
-    int *params = (int *) args;
-
-    int n = params[0];
-    int consumerCore = params[1];
-
-    double iterValue = 0, volatileValue, total = 0;
-    SetThreadAffinity(consumerCore);
-
-    for(int i = 0; i < n; i++) {
-        int j = 0;
-        replicate_loop_consumer(0, n, j, j++, iterValue, iterValue = j * i)
-
-        if(i % 1000){
-            volatileValue = iterValue * i;
-            RHT_Consume_Volatile(volatileValue);
-            total += volatileValue;
-        }
-    }
-
-    // To avoid compiler marking dead code
-    if(total < 0) {
-        fprintf(stderr, "Something about totall %f\n", total);
-    }
-}
-
-void stressTest_queue(){
-
-    int numTests = 5, problemSize = 30000, numThreads = 2, producerCore = 0, consumerCore = 2;
-    double currentElapsed = 0, meanTime = 0;
-    int consumerArgs[2];
-
-    consumerArgs[0] = problemSize;
-    consumerArgs[1] = consumerCore;
-
-    for(int i = 0; i < numTests; i++){
-        RHT_Replication_Init();
-
-        pthread_t myThread;
-
-        int err = pthread_create(&myThread, NULL, (void *(*)(void *)) test_execution_consumer, (void *) consumerArgs);
-
-        if (err) {
-            fprintf(stderr, "Fail creating thread %d\n", 1);
-            exit(1);
-        }
-        currentElapsed = test_execution_producer(problemSize, producerCore);
-        pthread_join(myThread, NULL);
-
-        printf("Exec[%i]: %f\n", i, currentElapsed);
-        meanTime += currentElapsed;
-    }
-
-    printf("----- Mean time: %f ---- \n\n", meanTime/numTests);
-
-    exit(0);
 }

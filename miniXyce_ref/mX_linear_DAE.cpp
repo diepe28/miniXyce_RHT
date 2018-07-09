@@ -76,12 +76,13 @@ std::vector<double> mX_linear_DAE_utils::evaluate_b_producer(double t, mX_linear
             result.push_back(0);
         } else {
             double sum = (double) (0);
-            std::list<mX_scaled_source *>::iterator it3 = (*it2)->scaled_src_list.begin();
-            int new_it3 = 0;
+            std::list<mX_scaled_source *>::iterator it3;
 
-            replicate_loop_producer(0, (*it2)->scaled_src_list.size(), new_it3, new_it3++, sum,
-                                    mX_source *src = (*it3)->src;
-                                            sum += src->output((double) (t)) * ((*it3++)->scale);)
+            for (it3 = (*it2)->scaled_src_list.begin(); it3 != (*it2)->scaled_src_list.end(); it3++) {
+                mX_source *src = (*it3)->src;
+                sum += src->output((t)) * ((*it3)->scale);
+                /*-- RHT -- */ RHT_Produce(sum);
+            }
 
             result.push_back(sum);
         }
@@ -102,12 +103,12 @@ std::vector<double> mX_linear_DAE_utils::evaluate_b_consumer(double t, mX_linear
             result.push_back(0);
         } else {
             double sum = (double) (0);
-            std::list<mX_scaled_source *>::iterator it3 = (*it2)->scaled_src_list.begin();
-            int new_it3 = 0;
-
-            replicate_loop_consumer(0, (*it2)->scaled_src_list.size(), new_it3, new_it3++, sum,
-                                    mX_source *src = (*it3)->src;
-                                            sum += src->output((double) (t)) * ((*it3++)->scale);)
+            std::list<mX_scaled_source *>::iterator it3;
+            for (it3 = (*it2)->scaled_src_list.begin(); it3 != (*it2)->scaled_src_list.end(); it3++) {
+                mX_source *src = (*it3)->src;
+                sum += src->output((t)) * ((*it3)->scale);
+                /*-- RHT -- */ RHT_Consume_Check(sum);
+            }
 
             result.push_back(sum);
         }

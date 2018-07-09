@@ -28,16 +28,19 @@ add_definitions(-DMINIXYCE_INFO=1-DPRINT_OUTPUT=0 -DPERCENTAGE_OF_REPLICATION=0)
 add_definitions(-DBRANCH_HINT=1 -DCOUNT_QUEUE_DESYNC=0 -DAPPROACH_NEW_ENQ_INDEX=0)
 
 # These are other approaches of the literature
-#add_definitions(-DAPPROACH_USING_POINTERS=0)
-#add_definitions(-DAPPROACH_ALREADY_CONSUMED=0)
-#add_definitions(-DAPPROACH_WANG=0)
-#
-## These are our approaches
+#add_definitions(-DAPPROACH_USING_POINTERS=1)
+#add_definitions(-DAPPROACH_ALREADY_CONSUMED=1)
+#add_definitions(-DAPPROACH_WANG=1)
+
+# These are our approaches
 #add_definitions(-DAPPROACH_MIX_WANG=1)
-#add_definitions(-DAPPROACH_CONSUMER_NO_SYNC=0)
-#add_definitions(-DAPPROACH_NEW_LIMIT=0)
-#add_definitions(-DAPPROACH_WRITE_INVERTED_NEW_LIMIT=0)
-#add_definitions(-DVAR_GROUPING=0) # it can be used with any of the below approaches
+add_definitions(-DAPPROACH_MIX_IMPROVED=1)
+add_definitions(-DVAR_GROUPING=1) # it can be used with any of the above approaches
+
+# no longer used
+#add_definitions(-DSKIP_VOLATILE=1)
+#add_definitions(-DAPPROACH_NEW_LIMIT=1)
+#add_definitions(-DAPPROACH_WRITE_INVERTED_NEW_LIMIT=1)
 
 #Init flags current
 set(FLAGS_CURRENT "anything")
@@ -78,7 +81,7 @@ endfunction(createExecutable)
 
 
 #current, for testing
-#createExecutable("miniXyce-Current" ${FLAGS_CURRENT} 0)
+createExecutable("miniXyce-Current" ${FLAGS_CURRENT} 0)
 
 # using pointer flags
 
@@ -112,8 +115,8 @@ set(FLAGS_MIX_WANG "APPROACH_MIX_WANG=1")
 #createExecutable("miniXyce-AC-VG" ${FLAGS_ALREADY_CONSUMED} 1)
 
 # WANG
-createExecutable("miniXyce-Wang" ${FLAGS_WANG} 0)
-createExecutable("miniXyce-Wang-VG" ${FLAGS_WANG} 1)
+#createExecutable("miniXyce-Wang" ${FLAGS_WANG} 0)
+#createExecutable("miniXyce-Wang-VG" ${FLAGS_WANG} 1)
 
 # no sync consumer
 #createExecutable("miniXyce-NSC" ${FLAGS_NO_SYNC_CONSUMER} 0)
