@@ -575,7 +575,6 @@ double main_execution_replicated(int p, int pid, int n, int argc, char* argv[]) 
     /*-- RHT -- */ RHT_Produce(num_voltage_sources);
     /*-- RHT -- */ RHT_Produce_Volatile(num_current_sources);
 
-
     doc.add("Circuit_attributes", "");
     doc.get("Circuit_attributes")->add("Number_of_devices", total_devices);
     if (num_resistors > 0)
@@ -604,16 +603,13 @@ double main_execution_replicated(int p, int pid, int n, int argc, char* argv[]) 
     MPI_Allreduce(&num_my_rows, &sum_rows, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
     MPI_Allreduce(&num_my_rows, &min_rows, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD);
     MPI_Allreduce(&num_my_rows, &max_rows, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
-    /*-- RHT -- */ RHT_Produce(sum_nnz);
-    /*-- RHT -- */ RHT_Produce(min_nnz);
-    /*-- RHT -- */ RHT_Produce(max_nnz);
-    /*-- RHT -- */ RHT_Produce(sum_rows);
-    /*-- RHT -- */ RHT_Produce(min_rows);
-    /*-- RHT -- */ RHT_Produce(max_rows);
-#endif
-
-    doc.add("Matrix_attributes", "");
-
+    /*-- RHT -- */ RHT_Produce_NoCheck(sum_nnz);
+    /*-- RHT -- */ RHT_Produce_NoCheck(min_nnz);
+    /*-- RHT -- */ RHT_Produce_NoCheck(max_nnz);
+    /*-- RHT -- */ RHT_Produce_NoCheck(sum_rows);
+    /*-- RHT -- */ RHT_Produce_NoCheck(min_rows);
+    /*-- RHT -- */ RHT_Produce_NoCheck(max_rows);
+#else
     /*-- RHT -- */ RHT_Produce(sum_rows);
     /*-- RHT -- */ RHT_Produce(min_rows);
     /*-- RHT -- */ RHT_Produce(max_rows);
@@ -624,7 +620,9 @@ double main_execution_replicated(int p, int pid, int n, int argc, char* argv[]) 
     /*-- RHT -- */ RHT_Produce(max_nnz);
     tempVar2 = (double) sum_nnz / p;
     /*-- RHT -- */ RHT_Produce_Volatile(tempVar2);
+#endif
 
+    doc.add("Matrix_attributes", "");
     doc.get("Matrix_attributes")->add("Global_rows", sum_rows);
     doc.get("Matrix_attributes")->add("Rows_per_proc_MIN", min_rows);
     doc.get("Matrix_attributes")->add("Rows_per_proc_MAX", max_rows);
@@ -679,33 +677,28 @@ double main_execution_replicated(int p, int pid, int n, int argc, char* argv[]) 
     std::string out_filename = ckt_netlist_filename.substr(0, dot_position) + "_tran_results.prn";
     std::ofstream *outfile = 0;
 
-
 #ifdef HAVE_MPI
     // Prepare rcounts and displs for a contiguous gather of the full solution vector.
     std::vector<int> rcounts(p, 0), displs(p, 0);
     MPI_Gather(&num_my_rows, 1, MPI_INT, &rcounts[0], 1, MPI_INT, 0, MPI_COMM_WORLD);
-    int i;
-    for (i = 1; i < p; i++) displs[i] = displs[i - 1] + rcounts[i - 1];
+    int i, length = rcounts.size();
+    for(i = 0; i < length; i++){
+        /*-- RHT -- */ RHT_Produce_NoCheck(rcounts[i]);
+    }
+
+    for (i = 1; i < p; i++) {
+        displs[i] = displs[i - 1] + rcounts[i - 1];
+        /*-- RHT -- */ RHT_Produce(displs[i]);
+    }
 
     std::vector<double> fullX(sum_rows, 0.0);
-    MPI_Gatherv(&init_cond[0], num_my_rows, MPI_DOUBLE, &fullX[0], &rcounts[0], &displs[0], MPI_DOUBLE, 0,
-                MPI_COMM_WORLD);
+    MPI_Gatherv(&init_cond[0], num_my_rows, MPI_DOUBLE, &fullX[0], &rcounts[0], &displs[0], MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
-    /*-- RHT -- */ // MPI values from all processors
-    i = 0;
-    iterCountProducer = sum_rows;
-    wait_for_consumer(globalQueue.diff)
-    while (globalQueue.diff < iterCountProducer) {
-        iterCountProducer -= globalQueue.diff;
-        for (; globalQueue.diff-- > 0; i++) {
-            write_move(fullX[i])
-        }
-        wait_for_consumer(globalQueue.diff)
-    }
-    for (; iterCountProducer-- > 0; i++) {
-        write_move(fullX[i])
-    }
+    length = fullX.size();
 
+    for (i = 1; i < length; i++) {
+        /*-- RHT -- */ RHT_Produce_NoCheck(fullX[i]);
+    }
 #endif
 
     if (pid == 0) {
@@ -776,8 +769,8 @@ double main_execution_replicated(int p, int pid, int n, int argc, char* argv[]) 
             curr = curr->next_in_row;
         }
     }
-    double matrix_setup_tend = mX_timer() - tstart;
 
+    double matrix_setup_tend = mX_timer() - tstart;
     // this is where the actual transient simulation starts
 
     tstart = mX_timer();
@@ -812,6 +805,7 @@ double main_execution_replicated(int p, int pid, int n, int argc, char* argv[]) 
 
         // now solve the linear system just built using GMRES(k)
         /*-- RHT -- */ gmres_producer(A, RHS, init_cond, tol, res, k, init_cond, iters, restarts);
+
         total_gmres_iters += iters;
         total_gmres_res += res;
         /*-- RHT -- */ RHT_Produce(total_gmres_iters);
@@ -822,9 +816,11 @@ double main_execution_replicated(int p, int pid, int n, int argc, char* argv[]) 
 #ifdef HAVE_MPI
         MPI_Gatherv(&init_cond[0], num_my_rows, MPI_DOUBLE, &fullX[0], &rcounts[0], &displs[0], MPI_DOUBLE, 0,
                     MPI_COMM_WORLD);
-        //dperez, todo, should we also send this fullX values, after it is received is written, but we would not replicate
-        // the MPI instructions, so what we would do is send the values to the consumer just to be validated, but the
-        // values are not changed so, there is no point in sending it
+
+        //dperez, send data to consumer
+        for(int i = 0, length = fullX.size(); i < length; i++){
+            /*-- RHT -- */ RHT_Produce_NoCheck(fullX[i]);
+        }
 #endif
         if (pid == 0) {
             outfile->precision(8);
@@ -844,7 +840,6 @@ double main_execution_replicated(int p, int pid, int n, int argc, char* argv[]) 
         io_tend += (mX_timer() - io_tstart);
 
         // increment t
-
         t += t_step;
         /*-- RHT -- */ RHT_Produce(t);
     }
@@ -888,11 +883,6 @@ double main_execution_replicated(int p, int pid, int n, int argc, char* argv[]) 
         std::cout << yaml;
 #endif
     }
-
-#if APPROACH_SRMT == 1
-    // done replication but UNIT might not have been reached
-    wangQueue.enqPtr = wangQueue.enqPtrDB;
-#endif
 
     //dperez, this is where the replicated execution ends
     if(pid == 0) {
@@ -970,8 +960,7 @@ void consumer_thread_func(void *args) {
     /*-- RHT -- */ sum_rows = (int) RHT_Consume();
     /*-- RHT -- */ min_rows = (int) RHT_Consume();
     /*-- RHT -- */ max_rows = (int) RHT_Consume();
-#endif
-
+#else
     /*-- RHT -- */ RHT_Consume_Check((double)sum_rows);
     /*-- RHT -- */ RHT_Consume_Check((double)min_rows);
     /*-- RHT -- */ RHT_Consume_Check((double)max_rows);
@@ -982,6 +971,7 @@ void consumer_thread_func(void *args) {
     /*-- RHT -- */ RHT_Consume_Check(max_nnz);
     tempVar = (double) sum_nnz / p;
     /*-- RHT -- */ RHT_Consume_Volatile(tempVar);
+#endif
 
     // compute the initial condition if not specified by user
     int start_row = dae->A->start_row;
@@ -1009,13 +999,26 @@ void consumer_thread_func(void *args) {
 #ifdef HAVE_MPI
     // Prepare rcounts and displs for a contiguous gather of the full solution vector.
     std::vector<int> rcounts(p, 0), displs(p, 0);
-    std::vector<double> fullX(sum_rows, 0.0);
+    //dperez, get this data from the producer side
 
-    /*-- RHT -- */ // MPI values from all processors
-    for(int i = 0; i < sum_rows; i++){
-        fullX[i] = RHT_Consume();
+    int i, length = rcounts.size();
+    for(i = 0; i < length; i++){
+        /*-- RHT -- */ rcounts[i] = RHT_Consume();
     }
 
+    for (i = 1; i < p; i++) {
+        displs[i] = displs[i - 1] + rcounts[i - 1];
+        /*-- RHT -- */ RHT_Consume_Check(displs[i]);
+    }
+
+    std::vector<double> fullX(sum_rows, 0.0);
+//  NOT REPLICATED  MPI_Gatherv(&init_cond[0], num_my_rows, MPI_DOUBLE, &fullX[0], &rcounts[0], &displs[0], MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+    length = fullX.size();
+
+    for (i = 1; i < length; i++) {
+        /*-- RHT -- */ fullX[i] = RHT_Consume();
+    }
 #endif
 
     if (pid == 0) {
@@ -1095,16 +1098,30 @@ void consumer_thread_func(void *args) {
 
         // now solve the linear system just built using GMRES(k)
         /*-- RHT -- */ gmres_consumer(A, RHS, init_cond, tol, res, k, init_cond, iters, restarts);
+
         total_gmres_iters += iters;
         total_gmres_res += res;
         /*-- RHT -- */ RHT_Consume_Check(total_gmres_iters);
         /*-- RHT -- */ RHT_Consume_Check(total_gmres_res);
 
         // write the results to file
+
+        double io_tstart = mX_timer();
+#ifdef HAVE_MPI
+//        MPI_Gatherv(&init_cond[0], num_my_rows, MPI_DOUBLE, &fullX[0], &rcounts[0], &displs[0], MPI_DOUBLE, 0,
+//                    MPI_COMM_WORLD);
+
+        //dperez, get data from consumer
+        for(int i = 0, length = fullX.size(); i < length; i++){
+            /*-- RHT -- */ fullX[i] = RHT_Consume();
+        }
+#endif
+
         // increment t
         t += t_step;
         /*-- RHT -- */ RHT_Consume_Check(t);
     }
+
 
     // Hurray, the transient simulation is done!
 

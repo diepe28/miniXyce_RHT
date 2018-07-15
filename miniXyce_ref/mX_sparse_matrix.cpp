@@ -288,7 +288,6 @@ void mX_matrix_utils::distributed_sparse_matrix_add_to_producer(distributed_spar
         /*-- RHT -- */ RHT_Produce(mid_start_row);
         /*-- RHT -- */ RHT_Produce(mid_end_row);
 
-        //dperez, maybe we can convert this loop into our scheme
         while (!pid_found) {
             if (row_idx < mid_start_row) {
                 end_pid = mid_pid - 1;
@@ -629,7 +628,6 @@ void mX_matrix_utils::sparse_matrix_vector_product_producer(distributed_sparse_m
 
 #ifdef HAVE_MPI
     // ok, now's the time to follow the send instructions that each pid has been maintaining
-    //dperez, todo, replicate using our scheme
     std::list<data_transfer_instruction *>::iterator it1;
 
     for (it1 = A->send_instructions.begin(); it1 != A->send_instructions.end(); it1++) {
@@ -675,7 +673,7 @@ void mX_matrix_utils::sparse_matrix_vector_product_producer(distributed_sparse_m
                 it3 = x_vec_entries.find(col_idx);
 
                 if (it3 != x_vec_entries.end()) {
-                    y[i - start_row] += (double) (it3->second) * (curr->value);
+                    y[i - start_row] += (it3->second) * (curr->value);
                 } else {
                     // no, the entry is not in the map either
                     // so this processor waits until someone sends the entry
@@ -683,10 +681,11 @@ void mX_matrix_utils::sparse_matrix_vector_product_producer(distributed_sparse_m
                     // puts the entry in the map for future reference
                     // continues with the matrix vector multiplication
 
+                    /*-- RHT -- */ RHT_Produce_Volatile(col_idx);
                     double x_vec_entry;
                     MPI_Status status;
                     MPI_Recv(&x_vec_entry, 1, MPI_DOUBLE, MPI_ANY_SOURCE, col_idx, MPI_COMM_WORLD, &status);
-                    /*-- RHT -- */ RHT_Produce(x_vec_entry);
+                    /*-- RHT -- */ RHT_Produce_NoCheck(x_vec_entry);
 
                     x_vec_entries[col_idx] = x_vec_entry;
                     y[i - start_row] += x_vec_entry * (curr->value);
@@ -732,11 +731,6 @@ void mX_matrix_utils::sparse_matrix_vector_product_consumer(distributed_sparse_m
     std::map<int, double> x_vec_entries;
     std::map<int, double>::iterator it3;
 
-//#if VAR_GROUPING == 1
-//    groupVarConsumer = 0;
-//    int j = 0;
-//#endif
-
     for (int i = start_row; i <= end_row; i++) {
         // compute the mat_vec product for the i'th row
 
@@ -773,6 +767,7 @@ void mX_matrix_utils::sparse_matrix_vector_product_consumer(distributed_sparse_m
                     // puts the entry in the map for future reference
                     // continues with the matrix vector multiplication
 
+                    /*-- RHT -- */ RHT_Consume_Volatile(col_idx);
                     double x_vec_entry;
                     //MPI_Status status;
                     //NOT REPLICATED MPI_Recv(&x_vec_entry, 1, MPI_DOUBLE, MPI_ANY_SOURCE, col_idx, MPI_COMM_WORLD, &status);
@@ -823,8 +818,9 @@ double mX_matrix_utils::norm_producer(std::vector<double> &x) {
     }
 
 #ifdef HAVE_MPI
+    /*-- RHT -- */ RHT_Produce_Volatile(local_norm);
     MPI_Allreduce(&local_norm, &global_norm, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    /*-- RHT -- */ RHT_Produce(global_norm);
+    /*-- RHT -- */ RHT_Produce_NoCheck(global_norm);
 #else
     global_norm = local_norm;
 #endif
@@ -837,13 +833,13 @@ double mX_matrix_utils::norm_consumer(std::vector<double> &x) {
 
     double global_norm;
     double local_norm = 0.0;
-    int i = 0;
 
     for (int i = 0; i < x.size(); i++) {
         local_norm += x[i] * x[i];
         /*-- RHT -- */ RHT_Consume_Check(local_norm);
     }
 #ifdef HAVE_MPI
+    /*-- RHT -- */ RHT_Consume_Volatile(local_norm);
     /*-- RHT -- */ global_norm = RHT_Consume();
 #else
     global_norm = local_norm;
@@ -1156,8 +1152,9 @@ void mX_matrix_utils::gmres_producer(distributed_sparse_matrix* A, std::vector<d
                     /*-- RHT -- */ RHT_Produce(local_dot);
                 }
 #ifdef HAVE_MPI
-                MPI_Allreduce(&local_dot,&global_dot,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
-                /*-- RHT -- */ RHT_Produce(global_dot);
+                /*-- RHT -- */ RHT_Produce_Volatile(local_dot);
+                MPI_Allreduce(&local_dot,&global_dot, 1, MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+                /*-- RHT -- */ RHT_Produce_NoCheck(global_dot);
 #else
                 global_dot = local_dot;
 #endif
@@ -1172,8 +1169,6 @@ void mX_matrix_utils::gmres_producer(distributed_sparse_matrix* A, std::vector<d
             double normTemp2 = norm_producer(temp2);
             /*-- RHT -- */ RHT_Produce(normTemp2);
             new_col_H.push_back(normTemp2);
-
-            int i = start_row;
 
             for (int i = start_row; i <= end_row; i++) {
                 temp2[i - start_row] /= new_col_H.back();
@@ -1195,7 +1190,6 @@ void mX_matrix_utils::gmres_producer(distributed_sparse_matrix* A, std::vector<d
                 /*-- RHT -- */ RHT_Produce(new_col_H[i]);
                 /*-- RHT -- */ RHT_Produce(new_col_H[i + 1]);
             }
-
 
             double r = std::sqrt(new_col_H[iters - 1] * new_col_H[iters - 1] + new_col_H[iters] * new_col_H[iters]);
             /*-- RHT -- */ RHT_Produce(r);
@@ -1228,7 +1222,6 @@ void mX_matrix_utils::gmres_producer(distributed_sparse_matrix* A, std::vector<d
             /*-- RHT -- */ RHT_Produce(old_g);
             /*-- RHT -- */ RHT_Produce(g[iters - 1]);
             tempVar = -old_g * sines.back();
-            // is it be a volatile access?
             /*-- RHT -- */ RHT_Produce(tempVar);
             g.push_back(tempVar);
 
@@ -1393,6 +1386,8 @@ void mX_matrix_utils::gmres_consumer(distributed_sparse_matrix* A, std::vector<d
                     /*-- RHT -- */ RHT_Consume_Check(local_dot);
                 }
 #ifdef HAVE_MPI
+                /*-- RHT -- */ RHT_Consume_Volatile(local_dot);
+                //NOT REPLICATED -- MPI_Allreduce(&local_dot,&global_dot, 1, MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
                 /*-- RHT -- */ global_dot = RHT_Consume();
 #else
                 global_dot = local_dot;
