@@ -132,9 +132,11 @@ static int are_both_nan(double pValue, double cValue){
 
 #if APPROACH_WANG == 1
 #define RHT_Produce_Volatile(volValue)                              \
-    wangQueue.pResidue = UNIT - (wangQueue.enqPtrLocal % UNIT);     \
-    if (wangQueue.pResidue > 1) wangQueue.enqPtrLocal = (wangQueue.enqPtrLocal + (wangQueue.pResidue - 1)) % RHT_QUEUE_SIZE; \
-    Wang_Produce(0);                                                \
+    wangQueue.pResidue = (UNIT - (wangQueue.enqPtrLocal % UNIT))% UNIT; \
+    if (wangQueue.pResidue > 0) { \
+        wangQueue.enqPtrLocal = (wangQueue.enqPtrLocal + (wangQueue.pResidue - 1)) % RHT_QUEUE_SIZE; \
+        Wang_Produce(0); \
+    } \
     wangQueue.volatileValue = volValue;                             \
     wangQueue.checkState = 0;                                       \
     while (wangQueue.checkState == 0); //asm("pause");
@@ -145,9 +147,11 @@ static int are_both_nan(double pValue, double cValue){
         Report_Soft_Error(volValue, wangQueue.volatileValue)        \
     }                                                               \
     wangQueue.checkState = 1;                                       \
-    wangQueue.cResidue = UNIT - (wangQueue.deqPtrLocal % UNIT);     \
-    while(wangQueue.cResidue-- > 0) Wang_Consume();
-
+    wangQueue.cResidue = (UNIT - (wangQueue.deqPtrLocal % UNIT)) % UNIT; \
+    if (wangQueue.cResidue > 0) { \
+        wangQueue.deqPtrLocal = (wangQueue.deqPtrLocal + (wangQueue.cResidue - 1)) % RHT_QUEUE_SIZE; \
+        Wang_Consume(); \
+    }
 
 #elif APPROACH_MIX_WANG == 1 || APPROACH_MIX_IMPROVED == 1
 #define RHT_Produce_Volatile(volValue)                        \
@@ -322,11 +326,18 @@ static INLINE void Wang_Consume_Check(double currentValue) {
         }
     }
 
-    if (!fequal(wangQueue.content[wangQueue.deqPtrLocal], currentValue)) {
+#if BRANCH_HINT == 1
+    if (__builtin_expect(fequal(wangQueue.content[wangQueue.deqPtrLocal], currentValue), 1))
+#else
+    if (fequal(wangQueue.content[wangQueue.deqPtrLocal], currentValue))
+#endif
+    {
+        wangQueue.deqPtrLocal = (wangQueue.deqPtrLocal + 1) % RHT_QUEUE_SIZE;
+    } else{
         Report_Soft_Error(currentValue, wangQueue.content[wangQueue.deqPtrLocal])
     }
 
-    wangQueue.deqPtrLocal = (wangQueue.deqPtrLocal + 1) % RHT_QUEUE_SIZE;
+
 }
 
 // -------- Mix approach of wang and ours

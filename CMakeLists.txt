@@ -22,7 +22,6 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHAVE_MPI -DMPICH_IGNORE_CXX_SEEK -DUSI
 # General compilation flags
 add_definitions(-ftree-vectorize -flto -funroll-all-loops -mavx2 -lm)
 add_definitions(-DMINIXYCE_INFO=1 -DPRINT_OUTPUT=0 -DPERCENTAGE_OF_REPLICATION=0)
-add_definitions(-DBRANCH_HINT=1)
 
 # These are other approaches of the literature
 #add_definitions(-DAPPROACH_USING_POINTERS=1)
@@ -35,6 +34,8 @@ add_definitions(-DAPPROACH_WANG=1)
 #add_definitions(-DAPPROACH_MIX_WANG=1)
 #add_definitions(-DAPPROACH_MIX_IMPROVED=1)
 #add_definitions(-DVAR_GROUPING=1) # it can be used with any of the above approaches
+
+#add_definitions(-DBRANCH_HINT=1)
 
 # no longer used
 #add_definitions(-DAPPROACH_NEW_LIMIT=1)
@@ -58,10 +59,14 @@ set(SOURCE_FILES
 
 function(createExecutable exeName compFlags varFlag)
     add_executable(${exeName} ${SOURCE_FILES})
-    set_target_properties(${exeName} PROPERTIES COMPILE_FLAGS "${compFlags}")
+    #this line causes problems when used with cmake 3.7 (version of g5k machines)
+    #set_target_properties(${exeName} PROPERTIES COMPILE_FLAGS "${compFlags}")
     set_property(TARGET ${exeName} APPEND PROPERTY COMPILE_DEFINITIONS ${compFlags})
-    if(varFlag)
+    if(varFlag EQUAL 1)
         set_property(TARGET ${exeName} APPEND PROPERTY COMPILE_DEFINITIONS "VAR_GROUPING=1")
+    endif()
+    if(varFlag EQUAL 2)
+        set_property(TARGET ${exeName} APPEND PROPERTY COMPILE_DEFINITIONS "JUST_VOLATILES=1")
     endif()
     target_link_libraries(${exeName} ${MPI_LIBRARIES})
     target_link_libraries(${exeName} pthread)
@@ -113,6 +118,7 @@ set(FLAGS_MIX_WANG "APPROACH_MIX_WANG=1")
 # WANG
 #createExecutable("miniXyce-Wang" ${FLAGS_WANG} 0)
 #createExecutable("miniXyce-Wang-VG" ${FLAGS_WANG} 1)
+#createExecutable("miniXyce-Wang-JV" ${FLAGS_WANG} 2)
 
 # no sync consumer
 #createExecutable("miniXyce-NSC" ${FLAGS_NO_SYNC_CONSUMER} 0)
