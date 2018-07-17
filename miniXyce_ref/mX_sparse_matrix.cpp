@@ -718,6 +718,7 @@ void mX_matrix_utils::sparse_matrix_vector_product_consumer(distributed_sparse_m
     for (it1 = A->send_instructions.begin(); it1 != A->send_instructions.end(); it1++) {
         std::list<int>::iterator it2;
 
+        //dperez, TODO, improve
         for (it2 = (*it1)->indices.begin(); it2 != (*it1)->indices.end(); it2++) {
             /*-- RHT -- */ RHT_Consume_Volatile(x[(*it2) - start_row]);
             //NOT REPLICATED --- MPI_Send(&x[(*it2) - start_row], 1, MPI_DOUBLE, (*it1)->pid, *it2, MPI_COMM_WORLD);

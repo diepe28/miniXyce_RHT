@@ -72,8 +72,6 @@ double main_execution_replicated(int p, int pid, int n, int argc, char* argv[]);
 
 double main_execution(int p, int pid, int n, int argc, char* argv[]);
 
-void stressTest_queue();
-
 //perl RC_ladder.pl 5000 > cirHuge.net
 
 int main(int argc, char* argv[]) {
@@ -165,8 +163,8 @@ int main(int argc, char* argv[]) {
         }
 
     } else {
+        printf("Rank %d using cores: %d, %d\n", pid, producerCore, consumerCore);
         SetThreadAffinity(producerCore);
-
         ConsumerParams *consumerParams;
 
         for (int iterator = 0; iterator < numRuns; iterator++) {
@@ -680,6 +678,7 @@ double main_execution_replicated(int p, int pid, int n, int argc, char* argv[]) 
 #ifdef HAVE_MPI
     // Prepare rcounts and displs for a contiguous gather of the full solution vector.
     std::vector<int> rcounts(p, 0), displs(p, 0);
+    /*-- RHT -- */ RHT_Produce_Volatile(num_my_rows);
     MPI_Gather(&num_my_rows, 1, MPI_INT, &rcounts[0], 1, MPI_INT, 0, MPI_COMM_WORLD);
     int i, length = rcounts.size();
     for(i = 0; i < length; i++){
@@ -693,12 +692,6 @@ double main_execution_replicated(int p, int pid, int n, int argc, char* argv[]) 
 
     std::vector<double> fullX(sum_rows, 0.0);
     MPI_Gatherv(&init_cond[0], num_my_rows, MPI_DOUBLE, &fullX[0], &rcounts[0], &displs[0], MPI_DOUBLE, 0, MPI_COMM_WORLD);
-
-    length = fullX.size();
-
-    for (i = 1; i < length; i++) {
-        /*-- RHT -- */ RHT_Produce_NoCheck(fullX[i]);
-    }
 #endif
 
     if (pid == 0) {
@@ -731,7 +724,7 @@ double main_execution_replicated(int p, int pid, int n, int argc, char* argv[]) 
 
         for (int i = 0; i < sum_rows; i++) {
 #ifdef HAVE_MPI
-            RHT_Produce_Volatile(fullX[i]);
+            // not volatiled-checked because it was just sent to consumer side
             *outfile << std::setw(18) << fullX[i];
 #else
             RHT_Produce_Volatile(init_cond[i]);
@@ -816,12 +809,8 @@ double main_execution_replicated(int p, int pid, int n, int argc, char* argv[]) 
 #ifdef HAVE_MPI
         MPI_Gatherv(&init_cond[0], num_my_rows, MPI_DOUBLE, &fullX[0], &rcounts[0], &displs[0], MPI_DOUBLE, 0,
                     MPI_COMM_WORLD);
-
-        //dperez, send data to consumer
-        for(int i = 0, length = fullX.size(); i < length; i++){
-            /*-- RHT -- */ RHT_Produce_NoCheck(fullX[i]);
-        }
 #endif
+        // write results to output file
         if (pid == 0) {
             outfile->precision(8);
             *outfile << std::scientific << std::setw(18) << t;
@@ -973,6 +962,16 @@ void consumer_thread_func(void *args) {
     /*-- RHT -- */ RHT_Consume_Volatile(tempVar);
 #endif
 
+    //doc.add("Matrix_attributes", "");
+    //doc.get("Matrix_attributes")->add("Global_rows", sum_rows);
+    //doc.get("Matrix_attributes")->add("Rows_per_proc_MIN", min_rows);
+    //doc.get("Matrix_attributes")->add("Rows_per_proc_MAX", max_rows);
+    //doc.get("Matrix_attributes")->add("Rows_per_proc_AVG", tempVar);
+    //doc.get("Matrix_attributes")->add("Global_NNZ", sum_nnz);
+    //doc.get("Matrix_attributes")->add("NNZ_per_proc_MIN", min_nnz);
+    //doc.get("Matrix_attributes")->add("NNZ_per_proc_MAX", max_nnz);
+    //doc.get("Matrix_attributes")->add("NNZ_per_proc_AVG", tempVar2);
+
     // compute the initial condition if not specified by user
     int start_row = dae->A->start_row;
     int end_row = dae->A->end_row;
@@ -998,12 +997,13 @@ void consumer_thread_func(void *args) {
 
 #ifdef HAVE_MPI
     // Prepare rcounts and displs for a contiguous gather of the full solution vector.
+    /*-- RHT -- */ RHT_Consume_Volatile(num_my_rows);
     std::vector<int> rcounts(p, 0), displs(p, 0);
     //dperez, get this data from the producer side
 
     int i, length = rcounts.size();
     for(i = 0; i < length; i++){
-        /*-- RHT -- */ rcounts[i] = RHT_Consume();
+        /*-- RHT -- */ rcounts[i] = (int) RHT_Consume();
     }
 
     for (i = 1; i < p; i++) {
@@ -1013,12 +1013,6 @@ void consumer_thread_func(void *args) {
 
     std::vector<double> fullX(sum_rows, 0.0);
 //  NOT REPLICATED  MPI_Gatherv(&init_cond[0], num_my_rows, MPI_DOUBLE, &fullX[0], &rcounts[0], &displs[0], MPI_DOUBLE, 0, MPI_COMM_WORLD);
-
-    length = fullX.size();
-
-    for (i = 1; i < length; i++) {
-        /*-- RHT -- */ fullX[i] = RHT_Consume();
-    }
 #endif
 
     if (pid == 0) {
@@ -1033,10 +1027,8 @@ void consumer_thread_func(void *args) {
         }
 
         for (int i = 0; i < sum_rows; i++) {
-#ifdef HAVE_MPI
-            RHT_Consume_Volatile(fullX[i]);
-#else
-            RHT_Consume_Volatile(init_cond[i]);
+#ifndef HAVE_MPI
+//            RHT_Consume_Volatile(init_cond[i]);
 #endif
         }
     }
@@ -1105,16 +1097,10 @@ void consumer_thread_func(void *args) {
         /*-- RHT -- */ RHT_Consume_Check(total_gmres_res);
 
         // write the results to file
-
-        double io_tstart = mX_timer();
+//        double io_tstart = mX_timer();
 #ifdef HAVE_MPI
-//        MPI_Gatherv(&init_cond[0], num_my_rows, MPI_DOUBLE, &fullX[0], &rcounts[0], &displs[0], MPI_DOUBLE, 0,
+//        NOT REPLICATED -- MPI_Gatherv(&init_cond[0], num_my_rows, MPI_DOUBLE, &fullX[0], &rcounts[0], &displs[0], MPI_DOUBLE, 0,
 //                    MPI_COMM_WORLD);
-
-        //dperez, get data from consumer
-        for(int i = 0, length = fullX.size(); i < length; i++){
-            /*-- RHT -- */ fullX[i] = RHT_Consume();
-        }
 #endif
 
         // increment t
@@ -1132,6 +1118,20 @@ void consumer_thread_func(void *args) {
     /*-- RHT -- */ RHT_Consume_Check(tempVar);
     tempVar = total_gmres_res / trans_steps;
     /*-- RHT -- */ RHT_Consume_Volatile(tempVar);
+
+    //doc.add("Transient Calculation", "");
+    //doc.get("Transient Calculation")->add("Number_of_time_steps", trans_steps);
+    //doc.get("Transient Calculation")->add("Time_start", t_start);
+    //doc.get("Transient Calculation")->add("Time_end", t_stop);
+    //doc.get("Transient Calculation")->add("Time_step", t_step);
+    //doc.get("Transient Calculation")->add("GMRES_tolerance", tol);
+    //doc.get("Transient Calculation")->add("GMRES_subspace_dim", k);
+    //doc.get("Transient Calculation")->add("GMRES_average_iters", tempVar);
+    //doc.get("Transient Calculation")->add("GMRES_average_res", tempVar2);
+    //doc.get("Transient Calculation")->add("Matrix_setup_time", matrix_setup_tend);
+    //doc.get("Transient Calculation")->add("Transient_calculation_time", tend - tstart);
+    //doc.add("I/O File Time", io_tend);
+    //doc.add("Total Simulation Time", sim_end);
 
     // Clean up
     mX_linear_DAE_utils::destroy(dae);

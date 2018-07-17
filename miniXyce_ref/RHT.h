@@ -130,13 +130,11 @@ static int are_both_nan(double pValue, double cValue){
             consumerValue, producerValue, wangQueue.producerCount, wangQueue.consumerCount, wangQueue.producerCount - wangQueue.consumerCount); \
     exit(1);
 
-#if SKIP_VOLATILE == 1
-#define RHT_Produce_Volatile(volValue);
-#define RHT_Consume_Volatile(volValue);
-#elif APPROACH_WANG == 1
+#if APPROACH_WANG == 1
 #define RHT_Produce_Volatile(volValue)                              \
     wangQueue.pResidue = UNIT - (wangQueue.enqPtrLocal % UNIT);     \
-    while(wangQueue.pResidue-- > 0) Wang_Produce(0);                \
+    if (wangQueue.pResidue > 1) wangQueue.enqPtrLocal = (wangQueue.enqPtrLocal + (wangQueue.pResidue - 1)) % RHT_QUEUE_SIZE; \
+    Wang_Produce(0);                                                \
     wangQueue.volatileValue = volValue;                             \
     wangQueue.checkState = 0;                                       \
     while (wangQueue.checkState == 0); //asm("pause");
@@ -149,6 +147,7 @@ static int are_both_nan(double pValue, double cValue){
     wangQueue.checkState = 1;                                       \
     wangQueue.cResidue = UNIT - (wangQueue.deqPtrLocal % UNIT);     \
     while(wangQueue.cResidue-- > 0) Wang_Consume();
+
 
 #elif APPROACH_MIX_WANG == 1 || APPROACH_MIX_IMPROVED == 1
 #define RHT_Produce_Volatile(volValue)                        \
@@ -289,10 +288,9 @@ static INLINE void Wang_Produce(double value) {
 
     if(wangQueue.enqPtrLocal % UNIT == 0) {
         // While were at the limit, we update the cached deqPtr
-//        if(wangQueue.enqPtrLocal == wangQueue.deqPtrCached) wangQueue.producerCount++;
         while(wangQueue.enqPtrLocal == wangQueue.deqPtrCached) {
             wangQueue.deqPtrCached = wangQueue.deqPtr;
-//            asm("pause");
+            asm("pause");
         }
         wangQueue.enqPtr = wangQueue.enqPtrLocal;
     }
@@ -302,10 +300,9 @@ static INLINE double Wang_Consume() {
     if(wangQueue.deqPtrLocal % UNIT == 0) {
         wangQueue.deqPtr = wangQueue.deqPtrLocal;
         // While were at the limit, we update the cached enqPtr
-        // if(wangQueue.deqPtrLocal == wangQueue.enqPtrCached) wangQueue.wangQueue.consumerCount++;
         while(wangQueue.deqPtrLocal == wangQueue.enqPtrCached) {
             wangQueue.enqPtrCached = wangQueue.enqPtr;
-            //asm("pause");
+            asm("pause");
         }
     }
 
@@ -319,10 +316,9 @@ static INLINE void Wang_Consume_Check(double currentValue) {
         wangQueue.deqPtr = wangQueue.deqPtrLocal;
 
         // While were at the limit, we update the cached enqPtr
-//        if(wangQueue.deqPtrLocal == wangQueue.enqPtrCached) wangQueue.wangQueue.consumerCount++;
         while(wangQueue.deqPtrLocal == wangQueue.enqPtrCached) {
             wangQueue.enqPtrCached = wangQueue.enqPtr;
-            //asm("pause");
+            asm("pause");
         }
     }
 

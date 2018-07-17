@@ -12,10 +12,9 @@ WANG_QUEUE wangQueue;
 
 void RHT_Produce(double value) {
 #if JUST_VOLATILES == 1
-    return;
-#endif
-
-#if APPROACH_USING_POINTERS == 1
+//    wangQueue.producerCount++;
+//    return;
+#elif APPROACH_USING_POINTERS == 1
     UsingPointers_Produce(value);
 #elif APPROACH_ALREADY_CONSUMED == 1 || APPROACH_CONSUMER_NO_SYNC == 1 // consumer no sync uses alreadyConsume produce method
     AlreadyConsumed_Produce(value);
@@ -48,10 +47,9 @@ void RHT_Produce_NoCheck(double value) {
 
 void RHT_Consume_Check(double currentValue) {
 #if JUST_VOLATILES == 1
-    return;
-#endif
-
-#if APPROACH_USING_POINTERS == 1
+//    wangQueue.consumerCount++;
+//    return;
+#elif APPROACH_USING_POINTERS == 1
     UsingPointers_Consume_Check(currentValue);
 #elif APPROACH_ALREADY_CONSUMED == 1
     AlreadyConsumed_Consume_Check(currentValue);

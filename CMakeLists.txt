@@ -13,25 +13,23 @@ include_directories(${MPI_INCLUDE_PATH})
 
 set(CMAKE_CXX_STANDARD 11)
 
-#-ftree-vectorize
+# fast math or not, there is a problem when nan values are found when this options is enabled
+# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffast-math")
 
 # mpi or not
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHAVE_MPI -DMPICH_IGNORE_CXX_SEEK -DUSING_MPI")
 
-# fast math or not, there is a problem when nan values are found when this options is enabled
-# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffast-math")
-
 # General compilation flags
 add_definitions(-ftree-vectorize -flto -funroll-all-loops -mavx2 -lm)
-add_definitions(-DMINIXYCE_INFO=1-DPRINT_OUTPUT=0 -DPERCENTAGE_OF_REPLICATION=0)
-add_definitions(-DBRANCH_HINT=1 -DCOUNT_QUEUE_DESYNC=0 -DAPPROACH_NEW_ENQ_INDEX=0)
+add_definitions(-DMINIXYCE_INFO=1 -DPRINT_OUTPUT=0 -DPERCENTAGE_OF_REPLICATION=0)
+add_definitions(-DBRANCH_HINT=1)
 
 # These are other approaches of the literature
 #add_definitions(-DAPPROACH_USING_POINTERS=1)
 #add_definitions(-DAPPROACH_ALREADY_CONSUMED=1)
 add_definitions(-DAPPROACH_WANG=1)
 
-add_definitions(-DJUST_VOLATILES=1)
+#add_definitions(-DJUST_VOLATILES=1)
 
 # These are our approaches
 #add_definitions(-DAPPROACH_MIX_WANG=1)
@@ -39,14 +37,11 @@ add_definitions(-DJUST_VOLATILES=1)
 #add_definitions(-DVAR_GROUPING=1) # it can be used with any of the above approaches
 
 # no longer used
-#add_definitions(-DSKIP_VOLATILE=1)
 #add_definitions(-DAPPROACH_NEW_LIMIT=1)
 #add_definitions(-DAPPROACH_WRITE_INVERTED_NEW_LIMIT=1)
 
 #Init flags current
 set(FLAGS_CURRENT "anything")
-
-add_definitions(-DSKIP_VOLATILE=0)
 
 set(SOURCE_FILES
         miniXyce_ref/mX_source.cpp miniXyce_ref/mX_linear_ckt_simulator.cpp
