@@ -30,6 +30,7 @@ cp -a $newFolder/cmake-build-debug/tests/cirHuge.net ./$newFolder/tests2
 #copying defaultParams.txt and lastUsedParams.txt to cmake-build-debug-2
 cp -a $newFolder/cmake-build-debug/default_params.txt ./$newFolder/cmake-build-debug-2
 cp -a $newFolder/cmake-build-debug/last_used_params.txt ./$newFolder/cmake-build-debug-2
+cp -a $newFolder/runEcotype.sh ./$newFolder/cmake-build-debug-2
 rm -rf $newFolder/cmake-build-debug/
 rm -rf $newFolder/tests/
 
@@ -80,4 +81,5 @@ echo "Success!!"
 #lyon
 #oarsub -p "cluster='nova'" -I -l nodes=1,walltime=5
 
+#oarsub -p "cluster='ecotype'" -l nodes=1,walltime=4 "/home/dperez/public/miniXyce_RHT/cmake-build-debug/runEcotype.sh"
 #ssh dperez@access.grid5000.fr
