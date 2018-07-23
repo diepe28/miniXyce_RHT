@@ -26,7 +26,7 @@ add_definitions(-DMINIXYCE_INFO=1 -DPRINT_OUTPUT=0 -DPERCENTAGE_OF_REPLICATION=0
 # These are other approaches of the literature
 #add_definitions(-DAPPROACH_USING_POINTERS=1)
 #add_definitions(-DAPPROACH_ALREADY_CONSUMED=1)
-add_definitions(-DAPPROACH_WANG=1)
+#add_definitions(-DAPPROACH_WANG=1)
 
 #add_definitions(-DJUST_VOLATILES=1)
 
@@ -35,7 +35,7 @@ add_definitions(-DAPPROACH_WANG=1)
 #add_definitions(-DAPPROACH_MIX_IMPROVED=1)
 #add_definitions(-DVAR_GROUPING=1) # it can be used with any of the above approaches
 
-#add_definitions(-DBRANCH_HINT=1)
+#add_definitions(-DOUR_IMPROVEMENTS=1)
 
 # no longer used
 #add_definitions(-DAPPROACH_NEW_LIMIT=1)
@@ -57,16 +57,19 @@ set(SOURCE_FILES
         miniXyce_ref/RHT.cpp miniXyce_ref/RHT.h
         )
 
-function(createExecutable exeName compFlags varFlag)
+function(createExecutable exeName compFlags varFlag ourImprovs)
     add_executable(${exeName} ${SOURCE_FILES})
     #this line causes problems when used with cmake 3.7 (version of g5k machines)
-    #set_target_properties(${exeName} PROPERTIES COMPILE_FLAGS "${compFlags}")
+    #set_target_properties(${exeName} PROPERTIES COMPILE_FLAGS "    ${compFlags}")
     set_property(TARGET ${exeName} APPEND PROPERTY COMPILE_DEFINITIONS ${compFlags})
     if(varFlag EQUAL 1)
         set_property(TARGET ${exeName} APPEND PROPERTY COMPILE_DEFINITIONS "VAR_GROUPING=1")
     endif()
     if(varFlag EQUAL 2)
         set_property(TARGET ${exeName} APPEND PROPERTY COMPILE_DEFINITIONS "JUST_VOLATILES=1")
+    endif()
+    if(ourImprovs EQUAL 1)
+        set_property(TARGET ${exeName} APPEND PROPERTY COMPILE_DEFINITIONS "OUR_IMPROVEMENTS=1")
     endif()
     target_link_libraries(${exeName} ${MPI_LIBRARIES})
     target_link_libraries(${exeName} pthread)
@@ -82,7 +85,7 @@ endfunction(createExecutable)
 
 
 #current, for testing
-createExecutable("miniXyce-Current" ${FLAGS_CURRENT} 0)
+#createExecutable("miniXyce-Current" ${FLAGS_CURRENT} 0 1)
 
 # using pointer flags
 
@@ -116,9 +119,13 @@ set(FLAGS_MIX_WANG "APPROACH_MIX_WANG=1")
 #createExecutable("miniXyce-AC-VG" ${FLAGS_ALREADY_CONSUMED} 1)
 
 # WANG
-#createExecutable("miniXyce-Wang" ${FLAGS_WANG} 0)
-#createExecutable("miniXyce-Wang-VG" ${FLAGS_WANG} 1)
-#createExecutable("miniXyce-Wang-JV" ${FLAGS_WANG} 2)
+createExecutable("miniXyce-Wang" ${FLAGS_WANG} 0 0)
+createExecutable("miniXyce-Wang-VG" ${FLAGS_WANG} 1 0)
+createExecutable("miniXyce-Wang-JV" ${FLAGS_WANG} 2 0)
+
+createExecutable("IMP-miniXyce-Wang" ${FLAGS_WANG} 0 1)
+createExecutable("IMP-miniXyce-Wang-VG" ${FLAGS_WANG} 1 1)
+createExecutable("IMP-miniXyce-Wang-JV" ${FLAGS_WANG} 2 1)
 
 # no sync consumer
 #createExecutable("miniXyce-NSC" ${FLAGS_NO_SYNC_CONSUMER} 0)

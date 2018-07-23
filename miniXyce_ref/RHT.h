@@ -130,27 +130,33 @@ static int are_both_nan(double pValue, double cValue){
             consumerValue, producerValue, wangQueue.producerCount, wangQueue.consumerCount, wangQueue.producerCount - wangQueue.consumerCount); \
     exit(1);
 
-#if APPROACH_WANG == 1
-#define RHT_Produce_Volatile(volValue)                              \
-    wangQueue.pResidue = (UNIT - (wangQueue.enqPtrLocal % UNIT))% UNIT; \
-    if (wangQueue.pResidue > 0) { \
-        wangQueue.enqPtrLocal = (wangQueue.enqPtrLocal + (wangQueue.pResidue - 1)) % RHT_QUEUE_SIZE; \
-        Wang_Produce(0); \
-    } \
-    wangQueue.volatileValue = volValue;                             \
-    wangQueue.checkState = 0;                                       \
-    while (wangQueue.checkState == 0); //asm("pause");
+#if OUR_IMPROVEMENTS == 1
+#define ThreadWait asm("pause");
+#else
+#define ThreadWait ;
+#endif
 
-#define RHT_Consume_Volatile(volValue)                              \
-    while (wangQueue.checkState == 1);  /*asm("pause");*/           \
-    if (!fequal(volValue, wangQueue.volatileValue)){                \
-        Report_Soft_Error(volValue, wangQueue.volatileValue)        \
-    }                                                               \
-    wangQueue.checkState = 1;                                       \
-    wangQueue.cResidue = (UNIT - (wangQueue.deqPtrLocal % UNIT)) % UNIT; \
-    if (wangQueue.cResidue > 0) { \
+#if APPROACH_WANG == 1
+#define RHT_Produce_Volatile(volValue)                                      \
+    wangQueue.pResidue = (UNIT - (wangQueue.enqPtrLocal % UNIT)) % UNIT;    \
+    if (wangQueue.pResidue > 0) {                                           \
+        wangQueue.enqPtrLocal = (wangQueue.enqPtrLocal + (wangQueue.pResidue - 1)) % RHT_QUEUE_SIZE; \
+        Wang_Produce(0);                                                    \
+    }                                                                       \
+    wangQueue.volatileValue = volValue;                                     \
+    wangQueue.checkState = 0;                                               \
+    while (wangQueue.checkState == 0); ThreadWait
+
+#define RHT_Consume_Volatile(volValue)                                      \
+    while (wangQueue.checkState == 1);  ThreadWait                          \
+    if (!fequal(volValue, wangQueue.volatileValue)){                        \
+        Report_Soft_Error(volValue, wangQueue.volatileValue)                \
+    }                                                                       \
+    wangQueue.checkState = 1;                                               \
+    wangQueue.cResidue = (UNIT - (wangQueue.deqPtrLocal % UNIT)) % UNIT;    \
+    if (wangQueue.cResidue > 0) {                                           \
         wangQueue.deqPtrLocal = (wangQueue.deqPtrLocal + (wangQueue.cResidue - 1)) % RHT_QUEUE_SIZE; \
-        Wang_Consume(); \
+        Wang_Consume();                                                     \
     }
 
 #elif APPROACH_MIX_WANG == 1 || APPROACH_MIX_IMPROVED == 1
@@ -294,7 +300,7 @@ static INLINE void Wang_Produce(double value) {
         // While were at the limit, we update the cached deqPtr
         while(wangQueue.enqPtrLocal == wangQueue.deqPtrCached) {
             wangQueue.deqPtrCached = wangQueue.deqPtr;
-            asm("pause");
+            ThreadWait
         }
         wangQueue.enqPtr = wangQueue.enqPtrLocal;
     }
@@ -306,7 +312,7 @@ static INLINE double Wang_Consume() {
         // While were at the limit, we update the cached enqPtr
         while(wangQueue.deqPtrLocal == wangQueue.enqPtrCached) {
             wangQueue.enqPtrCached = wangQueue.enqPtr;
-            asm("pause");
+            ThreadWait
         }
     }
 
@@ -322,11 +328,11 @@ static INLINE void Wang_Consume_Check(double currentValue) {
         // While were at the limit, we update the cached enqPtr
         while(wangQueue.deqPtrLocal == wangQueue.enqPtrCached) {
             wangQueue.enqPtrCached = wangQueue.enqPtr;
-            asm("pause");
+            ThreadWait
         }
     }
 
-#if BRANCH_HINT == 1
+#if OUR_IMPROVEMENTS == 1
     if (__builtin_expect(fequal(wangQueue.content[wangQueue.deqPtrLocal], currentValue), 1))
 #else
     if (fequal(wangQueue.content[wangQueue.deqPtrLocal], currentValue))

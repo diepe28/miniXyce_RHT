@@ -12,7 +12,7 @@ WANG_QUEUE wangQueue;
 
 void RHT_Produce(double value) {
 #if JUST_VOLATILES == 1
-//    wangQueue.producerCount++;
+    //    wangQueue.producerCount++;
 //    return;
 #elif APPROACH_USING_POINTERS == 1
     UsingPointers_Produce(value);
@@ -47,7 +47,7 @@ void RHT_Produce_NoCheck(double value) {
 
 void RHT_Consume_Check(double currentValue) {
 #if JUST_VOLATILES == 1
-//    wangQueue.consumerCount++;
+    //    wangQueue.consumerCount++;
 //    return;
 #elif APPROACH_USING_POINTERS == 1
     UsingPointers_Consume_Check(currentValue);
