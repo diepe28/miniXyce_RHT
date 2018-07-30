@@ -222,7 +222,6 @@ int main(int argc, char* argv[]) {
 }
 
 double main_execution(int p, int pid, int n, int argc, char* argv[]) {
-
     double sim_start = mX_timer(), elapsedExe = 0;
     struct timespec startExe, endExe, startAll;
 
@@ -236,8 +235,6 @@ double main_execution(int p, int pid, int n, int argc, char* argv[]) {
     double tstart, tend;
     int num_internal_nodes, num_voltage_sources, num_inductors;
     int num_current_sources = 0, num_resistors = 0, num_capacitors = 0;
-
-
 
     // initialize YAML doc
     YAML_Doc doc("miniXyce", "1.0");
@@ -566,11 +563,19 @@ double main_execution_replicated(int p, int pid, int n, int argc, char* argv[]) 
     doc.add("Netlist_file", ckt_netlist_filename.c_str());
 
     int total_devices = num_voltage_sources + num_current_sources + num_resistors + num_capacitors + num_inductors;
+#if JUST_VOLATILES == 1
+    /*-- RHT -- */ RHT_Produce_Volatile(total_devices);
+    /*-- RHT -- */ RHT_Produce_Volatile(num_resistors);
+    /*-- RHT -- */ RHT_Produce_Volatile(num_inductors);
+    /*-- RHT -- */ RHT_Produce_Volatile(num_capacitors);
+    /*-- RHT -- */ RHT_Produce_Volatile(num_voltage_sources);
+#else
     /*-- RHT -- */ RHT_Produce(total_devices);
     /*-- RHT -- */ RHT_Produce(num_resistors);
     /*-- RHT -- */ RHT_Produce(num_inductors);
     /*-- RHT -- */ RHT_Produce(num_capacitors);
     /*-- RHT -- */ RHT_Produce(num_voltage_sources);
+#endif
     /*-- RHT -- */ RHT_Produce_Volatile(num_current_sources);
 
     doc.add("Circuit_attributes", "");
@@ -586,13 +591,25 @@ double main_execution_replicated(int p, int pid, int n, int argc, char* argv[]) 
     if (num_current_sources > 0)
         doc.get("Circuit_attributes")->add("Current_sources_(I)", num_current_sources);
 
-
     int num_my_rows = dae->A->end_row - dae->A->start_row + 1;
-    /*-- RHT -- */ RHT_Produce(num_my_rows);
-
     int num_my_nnz = dae->A->local_nnz, sum_nnz = dae->A->local_nnz;
     int min_nnz = num_my_nnz, max_nnz = num_my_nnz;
     int min_rows = num_my_rows, max_rows = num_my_rows, sum_rows = num_my_rows;
+
+#if JUST_VOLATILES == 1
+    /*-- RHT -- */ RHT_Produce(sum_nnz);
+    /*-- RHT -- */ RHT_Produce(min_nnz);
+    /*-- RHT -- */ RHT_Produce(max_nnz);
+    /*-- RHT -- */ RHT_Produce(sum_rows);
+    /*-- RHT -- */ RHT_Produce(min_rows);
+#else
+    /*-- RHT -- */ RHT_Produce_Volatile(sum_nnz);
+    /*-- RHT -- */ RHT_Produce_Volatile(min_nnz);
+    /*-- RHT -- */ RHT_Produce_Volatile(max_nnz);
+    /*-- RHT -- */ RHT_Produce_Volatile(sum_rows);
+    /*-- RHT -- */ RHT_Produce_Volatile(min_rows);
+#endif
+    /*-- RHT -- */ RHT_Produce_Volatile(max_rows);
 
 #ifdef HAVE_MPI
     MPI_Allreduce(&num_my_nnz, &sum_nnz, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
@@ -601,24 +618,14 @@ double main_execution_replicated(int p, int pid, int n, int argc, char* argv[]) 
     MPI_Allreduce(&num_my_rows, &sum_rows, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
     MPI_Allreduce(&num_my_rows, &min_rows, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD);
     MPI_Allreduce(&num_my_rows, &max_rows, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
-    /*-- RHT -- */ RHT_Produce_NoCheck(sum_nnz);
-    /*-- RHT -- */ RHT_Produce_NoCheck(min_nnz);
-    /*-- RHT -- */ RHT_Produce_NoCheck(max_nnz);
-    /*-- RHT -- */ RHT_Produce_NoCheck(sum_rows);
-    /*-- RHT -- */ RHT_Produce_NoCheck(min_rows);
-    /*-- RHT -- */ RHT_Produce_NoCheck(max_rows);
-#else
-    /*-- RHT -- */ RHT_Produce(sum_rows);
-    /*-- RHT -- */ RHT_Produce(min_rows);
-    /*-- RHT -- */ RHT_Produce(max_rows);
-    tempVar = (double) sum_rows / p;
-    /*-- RHT -- */ RHT_Produce(tempVar);
-    /*-- RHT -- */ RHT_Produce(sum_nnz);
-    /*-- RHT -- */ RHT_Produce(min_nnz);
-    /*-- RHT -- */ RHT_Produce(max_nnz);
-    tempVar2 = (double) sum_nnz / p;
-    /*-- RHT -- */ RHT_Produce_Volatile(tempVar2);
+    RHT_Produce_NoCheck(sum_nnz);
+    RHT_Produce_NoCheck(sum_rows);
 #endif
+
+    tempVar = (double) sum_rows / p;
+    tempVar2 = (double) sum_nnz / p;
+    /*-- RHT -- */ RHT_Produce_Volatile(tempVar);
+    /*-- RHT -- */ RHT_Produce_Volatile(tempVar2);
 
     doc.add("Matrix_attributes", "");
     doc.get("Matrix_attributes")->add("Global_rows", sum_rows);
@@ -647,10 +654,17 @@ double main_execution_replicated(int p, int pid, int n, int argc, char* argv[]) 
         /*-- RHT -- */ std::vector<double> init_RHS = evaluate_b_producer(t_start, dae);
         /*-- RHT -- */ gmres_producer(dae->A, init_RHS, init_cond_guess, tol, res, k, init_cond, iters, restarts);
 
+#if JUST_VOLATILES == 1
+        /*-- RHT -- */ RHT_Produce_Volatile(tol);
+        /*-- RHT -- */ RHT_Produce_Volatile(k);
+        /*-- RHT -- */ RHT_Produce_Volatile(iters);
+        /*-- RHT -- */ RHT_Produce_Volatile(restarts);
+#else
         /*-- RHT -- */ RHT_Produce(tol);
         /*-- RHT -- */ RHT_Produce(k);
         /*-- RHT -- */ RHT_Produce(iters);
         /*-- RHT -- */ RHT_Produce(restarts);
+#endif
         /*-- RHT -- */ RHT_Produce_Volatile(res);
 
         doc.add("DCOP Calculation", "");
@@ -844,11 +858,21 @@ double main_execution_replicated(int p, int pid, int n, int argc, char* argv[]) 
     tend = mX_timer();
     double sim_end = tend - sim_start;
 
+
+#if JUST_VOLATILES == 1
+    /*-- RHT -- */ RHT_Produce_Volatile(trans_steps);
+    /*-- RHT -- */ RHT_Produce_Volatile(tol);
+    /*-- RHT -- */ RHT_Produce_Volatile(k);
+    tempVar = total_gmres_iters / trans_steps;
+    /*-- RHT -- */ RHT_Produce_Volatile(tempVar);
+#else
     /*-- RHT -- */ RHT_Produce(trans_steps);
     /*-- RHT -- */ RHT_Produce(tol);
     /*-- RHT -- */ RHT_Produce(k);
     tempVar = total_gmres_iters / trans_steps;
     /*-- RHT -- */ RHT_Produce(tempVar);
+#endif
+
     tempVar2 = total_gmres_res / trans_steps;
     /*-- RHT -- */ RHT_Produce_Volatile(tempVar2);
 
@@ -907,10 +931,10 @@ void consumer_thread_func(void *args) {
     ConsumerParams *params = (ConsumerParams *) args;
 
     bool init_cond_specified;
-    double tol, res, t_step, t_stop, t_start, tempVar;
+    double tol, res, t_step, t_stop, t_start, tempVar, tempVar2;
     int n, k, iters, p, pid, restarts;
     int num_internal_nodes, num_voltage_sources, num_inductors;
-    int num_current_sources, num_resistors , num_capacitors ;
+    int num_current_sources, num_resistors, num_capacitors;
     std::vector<double> init_cond;
     std::string ckt_netlist_filename;
 
@@ -920,7 +944,8 @@ void consumer_thread_func(void *args) {
     n = params->n;
     p = params->p;
 
-    get_parms(params->argc, params->argv, ckt_netlist_filename, t_start, t_step, t_stop, tol, k, init_cond, init_cond_specified, p, pid);
+    get_parms(params->argc, params->argv, ckt_netlist_filename, t_start, t_step, t_stop, tol, k, init_cond,
+              init_cond_specified, p, pid);
     mX_linear_DAE *dae = parse_netlist(ckt_netlist_filename, p, pid, n, num_internal_nodes,
                                        num_voltage_sources,
                                        num_current_sources, num_resistors, num_capacitors, num_inductors);
@@ -928,39 +953,58 @@ void consumer_thread_func(void *args) {
     // document circuit and matrix attributes
     int total_devices = num_voltage_sources + num_current_sources + num_resistors + num_capacitors + num_inductors;
 
-    RHT_Consume_Check((double)total_devices);
-    RHT_Consume_Check((double)num_resistors);
-    RHT_Consume_Check((double)num_inductors);
-    RHT_Consume_Check((double)num_capacitors);
-    RHT_Consume_Check((double)num_voltage_sources);
-    RHT_Consume_Volatile((double)num_current_sources);
+#if JUST_VOLATILES == 1
+    RHT_Consume_Volatile((double)total_devices);
+    RHT_Consume_Volatile((double)num_resistors);
+    RHT_Consume_Volatile((double)num_inductors);
+    RHT_Consume_Volatile((double)num_capacitors);
+    RHT_Consume_Volatile((double)num_voltage_sources);
+#else
+    RHT_Consume_Check((double) total_devices);
+    RHT_Consume_Check((double) num_resistors);
+    RHT_Consume_Check((double) num_inductors);
+    RHT_Consume_Check((double) num_capacitors);
+    RHT_Consume_Check((double) num_voltage_sources);
+#endif
+    RHT_Consume_Volatile((double) num_current_sources);
 
     int num_my_rows = dae->A->end_row - dae->A->start_row + 1;
-    /*-- RHT -- */ RHT_Consume_Check((double)num_my_rows);
+    /*-- RHT -- */ RHT_Consume_Check((double) num_my_rows);
 
     int num_my_nnz = dae->A->local_nnz, sum_nnz = dae->A->local_nnz;
     int min_nnz = num_my_nnz, max_nnz = num_my_nnz;
     int min_rows = num_my_rows, max_rows = num_my_rows, sum_rows = num_my_rows;
 
-#ifdef HAVE_MPI
-    /*-- RHT -- */ sum_nnz = (int) RHT_Consume();
-    /*-- RHT -- */ min_nnz = (int) RHT_Consume();
-    /*-- RHT -- */ max_nnz = (int) RHT_Consume();
-    /*-- RHT -- */ sum_rows = (int) RHT_Consume();
-    /*-- RHT -- */ min_rows = (int) RHT_Consume();
-    /*-- RHT -- */ max_rows = (int) RHT_Consume();
-#else
-    /*-- RHT -- */ RHT_Consume_Check((double)sum_rows);
-    /*-- RHT -- */ RHT_Consume_Check((double)min_rows);
-    /*-- RHT -- */ RHT_Consume_Check((double)max_rows);
-    tempVar = (double) sum_rows / p;
-    /*-- RHT -- */ RHT_Consume_Check(tempVar);
+#if JUST_VOLATILES == 1
     /*-- RHT -- */ RHT_Consume_Check(sum_nnz);
     /*-- RHT -- */ RHT_Consume_Check(min_nnz);
     /*-- RHT -- */ RHT_Consume_Check(max_nnz);
-    tempVar = (double) sum_nnz / p;
-    /*-- RHT -- */ RHT_Consume_Volatile(tempVar);
+    /*-- RHT -- */ RHT_Consume_Check(sum_rows);
+    /*-- RHT -- */ RHT_Consume_Check(min_rows);
+#else
+    /*-- RHT -- */ RHT_Consume_Volatile(sum_nnz);
+    /*-- RHT -- */ RHT_Consume_Volatile(min_nnz);
+    /*-- RHT -- */ RHT_Consume_Volatile(max_nnz);
+    /*-- RHT -- */ RHT_Consume_Volatile(sum_rows);
+    /*-- RHT -- */ RHT_Consume_Volatile(min_rows);
 #endif
+    /*-- RHT -- */ RHT_Consume_Volatile(max_rows);
+
+#ifdef HAVE_MPI
+    //-- RHT - Not replicated -- MPI_Allreduce(&num_my_nnz, &sum_nnz, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+    //-- RHT - Not replicated -- MPI_Allreduce(&num_my_nnz, &min_nnz, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD);
+    //-- RHT - Not replicated -- MPI_Allreduce(&num_my_nnz, &max_nnz, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
+    //-- RHT - Not replicated -- MPI_Allreduce(&num_my_rows, &sum_rows, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+    //-- RHT - Not replicated -- MPI_Allreduce(&num_my_rows, &min_rows, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD);
+    //-- RHT - Not replicated -- MPI_Allreduce(&num_my_rows, &max_rows, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
+    sum_nnz = (int) RHT_Consume();
+    sum_rows = (int) RHT_Consume();
+#endif
+
+    tempVar = (double) sum_rows / p;
+    tempVar2 = (double) sum_nnz / p;
+    /*-- RHT -- */ RHT_Consume_Volatile(tempVar);
+    /*-- RHT -- */ RHT_Consume_Volatile(tempVar2);
 
     //doc.add("Matrix_attributes", "");
     //doc.get("Matrix_attributes")->add("Global_rows", sum_rows);
@@ -988,21 +1032,40 @@ void consumer_thread_func(void *args) {
         /*-- RHT -- */ std::vector<double> init_RHS = evaluate_b_consumer(t_start, dae);
         /*-- RHT -- */ gmres_consumer(dae->A, init_RHS, init_cond_guess, tol, res, k, init_cond, iters, restarts);
 
+#if JUST_VOLATILES == 1
+        /*-- RHT -- */ RHT_Consume_Volatile(tol);
+        /*-- RHT -- */ RHT_Consume_Volatile(k);
+        /*-- RHT -- */ RHT_Consume_Volatile(iters);
+        /*-- RHT -- */ RHT_Consume_Volatile(restarts);
+#else
         /*-- RHT -- */ RHT_Consume_Check(tol);
         /*-- RHT -- */ RHT_Consume_Check(k);
         /*-- RHT -- */ RHT_Consume_Check(iters);
         /*-- RHT -- */ RHT_Consume_Check(restarts);
+#endif
         /*-- RHT -- */ RHT_Consume_Volatile(res);
+
+        //-- RHT - Not replicated -- doc.add("DCOP Calculation", "");
+        //-- RHT - Not replicated -- doc.get("DCOP Calculation")->add("Init_cond_specified", false);
+        //-- RHT - Not replicated -- doc.get("DCOP Calculation")->add("GMRES_tolerance", tol);
+        //-- RHT - Not replicated -- doc.get("DCOP Calculation")->add("GMRES_subspace_dim", k);
+        //-- RHT - Not replicated -- doc.get("DCOP Calculation")->add("GMRES_iterations", iters);
+        //-- RHT - Not replicated -- doc.get("DCOP Calculation")->add("GMRES_restarts", restarts);
+        //-- RHT - Not replicated -- doc.get("DCOP Calculation")->add("GMRES_native_residual", res);
+    } else {
+        //-- RHT - Not replicated -- doc.add("DCOP Calculation", "");
+        //-- RHT - Not replicated -- doc.get("DCOP Calculation")->add("Init_cond_specified", true);
     }
+
 
 #ifdef HAVE_MPI
     // Prepare rcounts and displs for a contiguous gather of the full solution vector.
-    /*-- RHT -- */ RHT_Consume_Volatile(num_my_rows);
     std::vector<int> rcounts(p, 0), displs(p, 0);
-    //dperez, get this data from the producer side
+    /*-- RHT -- */ RHT_Consume_Volatile(num_my_rows);
+//  NOT REPLICATED MPI_Gather(&num_my_rows, 1, MPI_INT, &rcounts[0], 1, MPI_INT, 0, MPI_COMM_WORLD);
 
     int i, length = rcounts.size();
-    for(i = 0; i < length; i++){
+    for (i = 0; i < length; i++) {
         /*-- RHT -- */ rcounts[i] = (int) RHT_Consume();
     }
 
@@ -1019,8 +1082,7 @@ void consumer_thread_func(void *args) {
         for (int i = 0; i < sum_rows; i++) {
             if (i < num_internal_nodes) {
                 tempVar = i + 1;
-            }
-            else {
+            } else {
                 tempVar = i + 1 - num_internal_nodes;
             }
             /*-- RHT -- */ RHT_Consume_Volatile(tempVar);
@@ -1028,7 +1090,7 @@ void consumer_thread_func(void *args) {
 
         for (int i = 0; i < sum_rows; i++) {
 #ifndef HAVE_MPI
-//            RHT_Consume_Volatile(init_cond[i]);
+            //            RHT_Consume_Volatile(init_cond[i]);
 #endif
         }
     }
@@ -1110,12 +1172,21 @@ void consumer_thread_func(void *args) {
 
 
     // Hurray, the transient simulation is done!
+    // Document transient simulation performance
 
+#if JUST_VOLATILES == 1
+    /*-- RHT -- */ RHT_Consume_Volatile(trans_steps);
+    /*-- RHT -- */ RHT_Consume_Volatile(tol);
+    /*-- RHT -- */ RHT_Consume_Volatile(k);
+    tempVar = total_gmres_iters / trans_steps;
+    /*-- RHT -- */ RHT_Consume_Volatile(tempVar);
+#else
     /*-- RHT -- */ RHT_Consume_Check(trans_steps);
     /*-- RHT -- */ RHT_Consume_Check(tol);
     /*-- RHT -- */ RHT_Consume_Check(k);
     tempVar = total_gmres_iters / trans_steps;
     /*-- RHT -- */ RHT_Consume_Check(tempVar);
+#endif
     tempVar = total_gmres_res / trans_steps;
     /*-- RHT -- */ RHT_Consume_Volatile(tempVar);
 

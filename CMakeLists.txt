@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.9)
+cmake_minimum_required(VERSION 3.7)
 project(miniXyceRHT)
 
 set(CMAKE_BUILD_TYPE Release) # optimizations, but debuging is not allowed
@@ -26,7 +26,7 @@ add_definitions(-DMINIXYCE_INFO=1 -DPRINT_OUTPUT=0 -DPERCENTAGE_OF_REPLICATION=0
 # These are other approaches of the literature
 #add_definitions(-DAPPROACH_USING_POINTERS=1)
 #add_definitions(-DAPPROACH_ALREADY_CONSUMED=1)
-#add_definitions(-DAPPROACH_WANG=1)
+add_definitions(-DAPPROACH_WANG=1)
 
 #add_definitions(-DJUST_VOLATILES=1)
 
@@ -85,7 +85,7 @@ endfunction(createExecutable)
 
 
 #current, for testing
-#createExecutable("miniXyce-Current" ${FLAGS_CURRENT} 0 1)
+createExecutable("miniXyce-Current" ${FLAGS_CURRENT} 2 1)
 
 # using pointer flags
 
@@ -114,18 +114,18 @@ set(FLAGS_MIX_WANG "APPROACH_MIX_WANG=1")
 #createExecutable("miniXyce-UP" ${FLAGS_USING_POINTERS} 0)
 #createExecutable("miniXyce-UP-VG" ${FLAGS_USING_POINTERS} 1)
 
-# already consumed
+# already consumed/home/diego/Documents/workspace/miniXyce_RHT/tests
 #createExecutable("miniXyce-AC" ${FLAGS_ALREADY_CONSUMED} 0)
 #createExecutable("miniXyce-AC-VG" ${FLAGS_ALREADY_CONSUMED} 1)
 
 # WANG
-createExecutable("miniXyce-Wang" ${FLAGS_WANG} 0 0)
-createExecutable("miniXyce-Wang-VG" ${FLAGS_WANG} 1 0)
-createExecutable("miniXyce-Wang-JV" ${FLAGS_WANG} 2 0)
+#createExecutable("miniXyce-Wang" ${FLAGS_WANG} 0 0)
+#createExecutable("miniXyce-Wang-VG" ${FLAGS_WANG} 1 0)
+#createExecutable("miniXyce-Wang-JV" ${FLAGS_WANG} 2 0)
 
-createExecutable("IMP-miniXyce-Wang" ${FLAGS_WANG} 0 1)
-createExecutable("IMP-miniXyce-Wang-VG" ${FLAGS_WANG} 1 1)
-createExecutable("IMP-miniXyce-Wang-JV" ${FLAGS_WANG} 2 1)
+#createExecutable("IMP-miniXyce-Wang" ${FLAGS_WANG} 0 1)
+#createExecutable("IMP-miniXyce-Wang-VG" ${FLAGS_WANG} 1 1)
+#createExecutable("IMP-miniXyce-Wang-JV" ${FLAGS_WANG} 2 1)
 
 # no sync consumer
 #createExecutable("miniXyce-NSC" ${FLAGS_NO_SYNC_CONSUMER} 0)
